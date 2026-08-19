@@ -95,6 +95,24 @@ conflicting options: port publishing and the container type network mode
 
 This is the cause of upstream issues #80, #69 and #65, where a container is
 destroyed and then cannot be recreated because its Unraid template still
-carries port mappings. Any payload Tetherd builds must strip the corresponding
-inspect fields (`PortBindings`, `ExposedPorts`, `Hostname`, `Dns`, `DnsSearch`,
-`DnsOptions`, `MacAddress`, `ExtraHosts`) and say so in the logs.
+carries port mappings.
+
+Testing each field individually against the daemon shows the documentation
+overstates the restriction. Rejected on Docker 29.6.1:
+
+- `Config.Hostname` — "conflicting options: hostname and the network mode"
+- `Config.ExposedPorts` — "port exposing and the container type network mode"
+- `HostConfig.PortBindings` — "port publishing and the container type network mode"
+- `HostConfig.PublishAllPorts` — same
+- `HostConfig.Dns` — "dns and the network mode"
+- `HostConfig.ExtraHosts` — "custom host-to-IP mapping and the network mode"
+
+Accepted despite being documented as unsupported: `Config.Domainname`,
+`Config.MacAddress`, `HostConfig.DnsSearch`, `HostConfig.DnsOptions`,
+`HostConfig.MacAddress`.
+
+Tetherd strips the union of both groups. The accepted-but-documented-as-
+unsupported fields are stripped anyway for two reasons: enforcement may differ
+on the older daemons Unraid ships, and the fields are meaningless in a borrowed
+namespace regardless — DNS resolution, hostname and MAC address all belong to
+the container that owns the namespace, not to the one borrowing it.

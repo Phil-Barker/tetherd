@@ -94,6 +94,24 @@ class ContainerInfo:
         return str(config.get("Image", ""))
 
 
+def reference_matches(ref: str, container: ContainerInfo) -> bool:
+    """Whether a network-mode reference identifies this container.
+
+    Normally an exact full-ID match, since the daemon normalises references at
+    create time. A name or an abbreviated ID is also accepted, because that
+    normalisation has only been verified on recent daemons.
+
+    An abbreviation must be a *prefix* of the ID, never merely contained in it,
+    and a name must match in full. Substring matching is the bug class behind
+    upstream issues #62 and #77, where 'radarr' matched 'radarr-4k'.
+    """
+    if not ref:
+        return False
+    if ref == container.id or ref == container.name:
+        return True
+    return len(ref) >= 12 and container.id.startswith(ref)
+
+
 class Verdict(StrEnum):
     """The assessed network health of a dependent container."""
 

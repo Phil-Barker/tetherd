@@ -15,7 +15,7 @@ payload and is the reason the predecessor project's detection was unreliable.
 
 from __future__ import annotations
 
-from .models import Assessment, ContainerInfo, Verdict
+from .models import Assessment, ContainerInfo, Verdict, reference_matches
 
 
 def assess(dependent: ContainerInfo, provider: ContainerInfo) -> Assessment:
@@ -30,7 +30,7 @@ def assess(dependent: ContainerInfo, provider: ContainerInfo) -> Assessment:
             reason="does not borrow another container's network",
         )
 
-    if not _refers_to(ref, provider):
+    if not reference_matches(ref, provider):
         return Assessment(
             container=dependent,
             verdict=Verdict.DEAD_PROVIDER_REF,
@@ -72,19 +72,6 @@ def assess(dependent: ContainerInfo, provider: ContainerInfo) -> Assessment:
         verdict=Verdict.HEALTHY,
         reason=f"sharing the current namespace of {provider.name}",
     )
-
-
-def _refers_to(ref: str, provider: ContainerInfo) -> bool:
-    """Whether a network-mode reference identifies this provider.
-
-    Normally an exact full-ID match. Name and abbreviated-ID forms are accepted
-    because older daemons may not normalise the reference, but an abbreviation
-    must be a prefix of the ID rather than merely contained in it — substring
-    matching is precisely the bug class behind upstream issues #62 and #77.
-    """
-    if ref == provider.id or ref == provider.name:
-        return True
-    return len(ref) >= 12 and provider.id.startswith(ref)
 
 
 def _short(container_id: str) -> str:

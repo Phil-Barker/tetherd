@@ -139,6 +139,100 @@ class TestTemplateAudit:
         assert audit.is_healthy
         assert audit.problems == []
 
+    def test_the_network_element_form_is_recognised(self, tmp_path: Path) -> None:
+        """How current Unraid actually writes it, per the 7.3.2 survey.
+
+        Every dependent on the surveyed server declared its provider in the
+        Network element, with Extra Parameters carrying only health-check flags.
+        """
+        write_template(
+            tmp_path,
+            "my-flaresolverr.xml",
+            container_template(
+                "flaresolverr",
+                network="container:GluetunVPN",
+                extra_params=(
+                    '--health-cmd="curl -s --max-time 5 --head http://1.1.1.1 || exit 1" '
+                    "--health-interval=60s --health-retries=1 --health-start-period=10s"
+                ),
+            ),
+        )
+
+        audit = audit_templates(["flaresolverr"], tmp_path, provider="GluetunVPN")["flaresolverr"]
+
+        assert audit.declared_provider == "GluetunVPN"
+        assert audit.is_healthy
+
+    def test_a_template_pointing_at_a_different_provider_is_flagged(self, tmp_path: Path) -> None:
+        """An installed container whose template names the wrong provider.
+
+        Pressing Apply in the Docker tab would attach it to a container Tetherd
+        is not watching, so it would drop off the network with nothing to fix it.
+        """
+        write_template(
+            tmp_path, "my-app.xml", container_template("app", network="container:old-vpn")
+        )
+
+        audit = audit_templates(["app"], tmp_path, provider="GluetunVPN")["app"]
+
+        assert audit.declared_provider == "old-vpn"
+        assert any("wrong container" in problem for problem in audit.problems)
+
+    def test_templates_for_uninstalled_apps_are_ignored_entirely(self, tmp_path: Path) -> None:
+        """Unraid keeps XML for apps you have removed, so Previous Apps can reinstall them.
+
+        The surveyed server held 82 templates against far fewer containers,
+        including one for a long-removed app still wired to a VPN container that
+        no longer exists. Those files are history, not configuration: the audit is
+        driven by the containers that exist, so it never reads them. Do not
+        "improve" this into scanning the directory — every orphan would become a
+        warning about something the user deliberately kept.
+        """
+        write_template(
+            tmp_path,
+            "my-lazylibrarian.xml",
+            container_template("lazylibrarian", network="container:binhex-qbittorrentvpn"),
+        )
+        write_template(tmp_path, "my-app.xml", container_template("app", network="none"))
+
+        audits = audit_templates(["app"], tmp_path, provider="GluetunVPN")
+
+        assert "lazylibrarian" not in audits
+        assert audits["app"].is_healthy
+
+    def test_provider_is_not_checked_when_none_is_configured(self, tmp_path: Path) -> None:
+        write_template(tmp_path, "my-app.xml", container_template("app", network="container:other"))
+
+        assert audit_templates(["app"], tmp_path)["app"].is_healthy
+
+    @pytest.mark.parametrize(
+        "extra_params",
+        [
+            "--net=container:gluetun",
+            "--network=container:gluetun",
+            "--net container:gluetun",
+            '--network="container:gluetun" --rm',
+            "--cap-add=NET_ADMIN --net='container:gluetun'",
+        ],
+    )
+    def test_every_extra_params_spelling_is_parsed(self, tmp_path: Path, extra_params: str) -> None:
+        """Unraid stores Extra Parameters verbatim, so all of Docker's forms appear."""
+        write_template(
+            tmp_path,
+            "my-app.xml",
+            container_template("app", network="none", extra_params=extra_params),
+        )
+
+        assert audit_templates(["app"], tmp_path)["app"].declared_provider == "gluetun"
+
+    def test_a_template_with_no_borrowed_network_declares_no_provider(self, tmp_path: Path) -> None:
+        write_template(tmp_path, "my-app.xml", container_template("app", network="bridge"))
+
+        audit = audit_templates(["app"], tmp_path, provider="GluetunVPN")["app"]
+
+        assert audit.declared_provider is None
+        assert audit.is_healthy
+
     def test_a_missing_template_is_reported(self, tmp_path: Path) -> None:
         audit = audit_templates(["ghost"], tmp_path)["ghost"]
 

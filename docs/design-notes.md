@@ -7,6 +7,16 @@ if any claim stops holding. Re-run it when changing the supported Docker range.
 Environment for the run recorded below: Docker Engine 29.6.1, API v1.55, Linux
 6.8, `alpine:3.22` test containers. 17 of 17 checks passed.
 
+Independently confirmed on a live Unraid server by `scripts/unraid-recon.sh`:
+Unraid 7.3.2, kernel 6.18.38-Unraid, Docker Engine 29.5.3, API v1.54, with 82
+user templates and containers routed through a gluetun VPN container. Findings
+1, 2 and 3 below all hold identically there.
+
+Note that Unraid 7.3.2 ships a Docker version close to the development machine's,
+so the behaviour below is verified on current Unraid but *not* on the older
+daemons that Unraid 6.x shipped. Reference handling stays deliberately tolerant
+of name-form values for that reason.
+
 ## 1. A dependent container owns no network metadata
 
 For a container created with `--network container:<ref>`, the daemon reports:
@@ -116,3 +126,65 @@ unsupported fields are stripped anyway for two reasons: enforcement may differ
 on the older daemons Unraid ships, and the fields are meaningless in a borrowed
 namespace regardless — DNS resolution, hostname and MAC address all belong to
 the container that owns the namespace, not to the one borrowing it.
+
+## 6. Unraid specifics, verified on 7.3.2
+
+Exactly four integration labels are in use across the whole host:
+`net.unraid.docker.managed`, `.icon`, `.webui` and `.shell`. Unraid reads them
+straight off the container, so preserving them is what keeps a container from
+appearing as "3rd Party" in the Docker tab, with its icon and WebUI link intact.
+
+**`net.unraid.docker.template` does not exist.** No container on the server
+carries it. This matters because the fix proposed by the community for upstream
+issue #77 was to read the template path out of that label instead of guessing a
+filename; it would not have worked. Tetherd identifies templates by the `<Name>`
+element inside the file, which needs no label.
+
+Template structure, from 82 real templates: root element `Container`, with
+`Name`, `Repository`, `Registry`, `Network`, `MyIP`, `MyMAC`, `Shell`, `WebUI`,
+`Icon`, `ExtraParams`, `PostArgs`, `Privileged`, `CPUset`, `Category`, `Project`,
+`Support`, `Overview`, `TemplateURL`, `DonateLink`, `DonateText`,
+`DateInstalled`, `Requires` and `ReadMe`, plus repeated `Config` elements typed
+`Variable` (472), `Path` (176), `Port` (85), `Label` (24) and `Device` (5).
+
+Crucially, a borrowed network is expressed as `<Network>container:GluetunVPN</Network>`
+— in the `Network` element itself, not as `--net=container:` in `ExtraParams`.
+Both forms are recognised, since older templates and the upstream README's
+"alternate steps" use the `ExtraParams` form, and it is the mismatch between the
+two that produces issue #57.
+
+Because the `Network` element names the provider, a template can be checked
+against the provider Tetherd is actually configured for, catching an installed
+container whose template would reattach it somewhere unwatched.
+
+### Templates outlive the containers they describe
+
+The surveyed server held 82 templates against far fewer installed containers.
+Unraid keeps the XML for apps you remove so they can be reinstalled from Previous
+Apps, which means the directory is a record of everything ever installed, not a
+description of what is running. Four of the surveyed templates declared
+`container:GluetunVPN`; a fifth, for an app uninstalled some time ago, still
+declared `container:binhex-qbittorrentvpn` — an all-in-one qBittorrent/VPN image
+since replaced by gluetun plus a standalone qBittorrent.
+
+Two consequences follow.
+
+The audit is driven by the list of containers that exist, and never by the
+contents of the template directory. Scanning the directory would turn every
+orphan into a warning about a file the user intentionally kept.
+
+More importantly, this is what makes upstream's matching bug severe rather than
+merely untidy. Issues #77 and #75 describe the wrong template being picked by
+substring-matching a container name against filenames, and the pool being
+searched contains abandoned templates carrying network wiring that was correct
+years ago. A stale `binhex-qbittorrentvpn` provider in a matched orphan is
+exactly the kind of value that gets applied to a live container and looks, from
+the outside, like an unexplained network failure. Matching on the `<Name>`
+element of a template belonging to a container that actually exists closes both
+halves of that.
+
+Also confirmed: `/usr/local/emhttp` and `/usr/local/emhttp/webGui/scripts/notify`
+both exist, and the update-status cache lives at
+`/var/lib/docker/unraid-update-status.json` rather than the dynamix path some
+documentation cites.
+

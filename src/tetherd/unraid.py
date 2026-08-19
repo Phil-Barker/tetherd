@@ -21,11 +21,20 @@ rebuilding from it. The distinction matters:
   saying nothing.
 
 Templates are matched by the ``<Name>`` element inside the file, never by
-filename. Filename guessing is the bug behind upstream issues #77 and #75.
+filename. Filename guessing is the bug behind upstream issues #77 and #75, and
+it is made worse by Unraid keeping the XML for apps you have uninstalled so they
+can be reinstalled from Previous Apps. The directory therefore records everything
+ever installed, so a substring match can land on an abandoned template describing
+network wiring that was correct years ago.
+
+For the same reason the audit is driven by the containers that exist and never by
+the contents of the template directory: an orphaned template is history the user
+chose to keep, not a misconfiguration to report.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,9 +48,13 @@ LABEL_SHELL = "net.unraid.docker.shell"
 #: The labels Unraid reads off a container to present it in the Docker tab.
 INTEGRATION_LABELS = (LABEL_MANAGED, LABEL_ICON, LABEL_WEBUI, LABEL_SHELL)
 
-#: Set by some Unraid versions to record which template produced a container.
-#: Not part of the documented set, so treated as optional.
-LABEL_TEMPLATE = "net.unraid.docker.template"
+#: Deliberately not used. The accepted community fix for upstream issue #77 was
+#: to read a container's template path from this label rather than guessing a
+#: filename, but a survey of a live Unraid 7.3.2 server found it on no container
+#: at all: only the four labels above are in use. Templates are identified by
+#: their <Name> element instead, which requires no label. Kept named here so the
+#: reasoning is discoverable rather than rediscovered.
+UNUSED_LABEL_TEMPLATE = "net.unraid.docker.template"
 
 #: Present on an Unraid host, and nowhere else.
 UNRAID_MARKER = Path("/usr/local/emhttp")
@@ -122,6 +135,7 @@ class TemplateAudit:
 
     container: str
     path: Path | None
+    declared_provider: str | None = None
     problems: list[str] = field(default_factory=list)
 
     @property
@@ -136,6 +150,7 @@ class TemplateAudit:
 def audit_templates(
     container_names: Iterable[str],
     template_dir: Path = DEFAULT_TEMPLATE_DIR,
+    provider: str | None = None,
 ) -> dict[str, TemplateAudit]:
     """Check each container's Unraid template for problems, read-only.
 
@@ -162,7 +177,10 @@ def audit_templates(
                 ],
             )
             continue
-        audits[name] = TemplateAudit(container=name, path=path, problems=_problems_in(path))
+        declared, problems = _inspect_template(path, provider)
+        audits[name] = TemplateAudit(
+            container=name, path=path, declared_provider=declared, problems=problems
+        )
     return audits
 
 
@@ -197,39 +215,76 @@ def _declared_name(path: Path) -> str | None:
     return name.strip() if name else None
 
 
-def _problems_in(path: Path) -> list[str]:
+def _inspect_template(path: Path, provider: str | None) -> tuple[str | None, list[str]]:
+    """The provider a template declares, and anything wrong with the template."""
     try:
         root = ElementTree.parse(path).getroot()
     except (ElementTree.ParseError, OSError) as exc:
-        return [f"template {path.name} cannot be parsed: {exc}"]
+        return None, [f"template {path.name} cannot be parsed: {exc}"]
+
+    network = (root.findtext("Network") or "").strip()
+    extra_params = (root.findtext("ExtraParams") or "").strip()
+
+    # A borrowed network appears either in the Network element, which is what
+    # current Unraid writes, or as a flag in Extra Parameters, the older style
+    # the upstream README still documents as its "alternate steps".
+    from_extra_params = _provider_from_extra_params(extra_params)
+    declared = _provider_from_network_element(network) or from_extra_params
+    if declared is None:
+        return None, []
 
     problems: list[str] = []
-    network = (root.findtext("Network") or "").strip().lower()
-    extra_params = (root.findtext("ExtraParams") or "").strip()
-    borrows_network = "--net=container:" in extra_params or "--network=container:" in extra_params
 
-    published = [
-        config
+    published = sorted(
+        (config.text or "").strip()
         for config in root.findall("Config")
         if (config.get("Type") or "").strip().lower() == "port" and (config.text or "").strip()
-    ]
-
-    if (borrows_network or network.startswith("container:")) and published:
-        ports = ", ".join(sorted((c.text or "").strip() for c in published))
+    )
+    if published:
         problems.append(
-            f"template {path.name} publishes ports ({ports}) while routing through "
-            "another container's network. Unraid will fail to recreate it with "
-            '"conflicting options: port publishing and the container type network '
-            'mode". Remove the port mappings from the template; they belong on the '
-            "container that owns the network."
+            f"template {path.name} publishes ports ({', '.join(published)}) while "
+            "routing through another container's network. Unraid will fail to "
+            'recreate it with "conflicting options: port publishing and the '
+            'container type network mode". Remove the port mappings from the '
+            "template; they belong on the container that owns the network."
         )
 
-    if borrows_network and network not in {"none", ""}:
+    # Issue #57: the network is requested in Extra Parameters while Network Type
+    # says something else, so Unraid records the wrong network and the container
+    # is never detected as a dependent.
+    if from_extra_params is not None and network.lower() not in {"none", ""}:
         problems.append(
             f"template {path.name} sets Network Type to {network!r} while also "
-            "passing --net=container: in Extra Parameters. Unraid records the "
-            "network from Network Type, so the container may not end up borrowing "
-            "the network at all. Set Network Type to None."
+            "requesting a container network in Extra Parameters. Unraid records "
+            "the network from Network Type, so this container may not end up "
+            "borrowing the network at all. Set Network Type to None."
         )
 
-    return problems
+    if provider and declared != provider:
+        problems.append(
+            f"template {path.name} routes through {declared!r}, but Tetherd is "
+            f"configured for {provider!r}. Recreating this container from the "
+            "Docker tab would attach it to the wrong container."
+        )
+
+    return declared, problems
+
+
+def _provider_from_network_element(network: str) -> str | None:
+    if not network.lower().startswith("container:"):
+        return None
+    return network.partition(":")[2].strip() or None
+
+
+#: Docker's CLI accepts --net and --network, with the value joined by = or by a
+#: space, and Unraid stores Extra Parameters verbatim, so all four spellings turn
+#: up along with optional quoting around the value.
+_EXTRA_PARAMS_NETWORK = re.compile(
+    r"--net(?:work)?[=\s]+[\"']?container:(?P<provider>[^\s\"']+)",
+    re.IGNORECASE,
+)
+
+
+def _provider_from_extra_params(extra_params: str) -> str | None:
+    match = _EXTRA_PARAMS_NETWORK.search(extra_params)
+    return match.group("provider") if match else None

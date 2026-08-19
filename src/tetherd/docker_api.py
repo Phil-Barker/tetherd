@@ -109,6 +109,25 @@ class DockerApi:
             )
         ]
 
+    def find_by_name_prefix(self, prefix: str) -> list[str]:
+        """IDs of containers whose name starts with the given prefix.
+
+        Prefix matching is only ever used for deliberately namespaced things
+        such as test fixtures. Managed containers are always addressed by exact
+        name or ID: loose name matching is the bug behind upstream issues #62
+        and #77.
+        """
+        try:
+            summaries: list[Mapping[str, Any]] = self._client.api.containers(all=True)
+        except DockerException as exc:
+            raise DockerUnavailableError(f"cannot list containers: {exc}") from exc
+
+        return [
+            str(summary["Id"])
+            for summary in summaries
+            if any(str(name).lstrip("/").startswith(prefix) for name in summary.get("Names") or [])
+        ]
+
     def inspect(self, ref: str) -> Mapping[str, Any] | None:
         """Full inspect payload, or None if there is no such container."""
         try:

@@ -36,23 +36,31 @@ def docker_api() -> Iterator[DockerApi]:
 
 @pytest.fixture
 def container_factory(docker_api: DockerApi) -> Iterator[object]:
-    """Create test containers and guarantee they are cleaned up."""
-    created: list[str] = []
+    """Create test containers and guarantee they are cleaned up.
+
+    Cleanup sweeps by name prefix rather than tracking the IDs handed out,
+    because a rebuild test deliberately replaces a container with a new one that
+    the factory never saw. Tracking IDs alone leaks those replacements.
+    """
 
     def create(name: str, body: dict[str, object], *, start: bool = True) -> str:
         full_name = f"{NAME_PREFIX}{name}"
         if docker_api.exists(full_name):
             docker_api.remove(full_name, force=True)
         container_id = docker_api.create(full_name, {"Image": TEST_IMAGE, **body})
-        created.append(container_id)
         if start:
             docker_api.start(container_id)
         return container_id
 
+    _remove_test_containers(docker_api)
     yield create
+    _remove_test_containers(docker_api)
 
-    for container_id in reversed(created):
-        # Cleanup must never fail a test run, and a container the test removed
-        # itself is the normal case here.
+
+def _remove_test_containers(docker_api: DockerApi) -> None:
+    """Remove every container this suite could have created."""
+    for container_id in docker_api.find_by_name_prefix(NAME_PREFIX):
+        # Cleanup must never fail a test run; something the test already removed
+        # is the normal case.
         with suppress(ContainerOperationError):
             docker_api.remove(container_id, force=True)

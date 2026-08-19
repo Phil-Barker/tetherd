@@ -128,6 +128,28 @@ class DockerApi:
             if any(str(name).lstrip("/").startswith(prefix) for name in summary.get("Names") or [])
         ]
 
+    def find_by_name_suffix(self, suffix: str) -> list[tuple[str, str]]:
+        """(id, name) of containers whose name ends with the given suffix.
+
+        Used to find containers Tetherd itself renamed aside during a rebuild, so
+        an interrupted rebuild can be recovered on a later run. As with prefix
+        matching, this is only ever applied to Tetherd's own namespace, never to
+        user-chosen names.
+        """
+        try:
+            summaries: list[Mapping[str, Any]] = self._client.api.containers(all=True)
+        except DockerException as exc:
+            raise DockerUnavailableError(f"cannot list containers: {exc}") from exc
+
+        found: list[tuple[str, str]] = []
+        for summary in summaries:
+            for raw in summary.get("Names") or []:
+                name = str(raw).lstrip("/")
+                if name.endswith(suffix):
+                    found.append((str(summary["Id"]), name))
+                    break
+        return found
+
     def inspect(self, ref: str) -> Mapping[str, Any] | None:
         """Full inspect payload, or None if there is no such container."""
         try:

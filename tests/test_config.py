@@ -32,6 +32,7 @@ def test_minimal_configuration_has_workable_defaults() -> None:
     assert settings.reconcile_interval_seconds == 300.0
     assert settings.dry_run is False
     assert settings.probe.enabled is False
+    assert settings.adopt_orphans is True
     assert settings.snapshot_dir == Path("/config/snapshots")
 
 

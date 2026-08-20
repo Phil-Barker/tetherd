@@ -131,6 +131,16 @@ class Settings(BaseSettings):
         default=False,
         description="Only manage containers labelled tetherd.enable=true.",
     )
+    adopt_orphans: bool = Field(
+        default=True,
+        description=(
+            "Manage containers pointing at a container ID that no longer exists. "
+            "Such a container cannot start and nothing can claim it, and this is "
+            "the state a host is in when someone installs Tetherd to fix it. Turn "
+            "off if you run more than one provider, so orphans of the other one "
+            "are left alone."
+        ),
+    )
 
     reconcile_interval_seconds: float = Field(
         default=300.0,

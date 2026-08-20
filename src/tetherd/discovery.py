@@ -23,6 +23,7 @@ ENABLE_LABEL = "tetherd.enable"
 class SkipReason(StrEnum):
     IS_PROVIDER = "is_provider"
     OTHER_PROVIDER = "other_provider"
+    ORPHANED = "orphaned"
     EXCLUDED = "excluded"
     NOT_INCLUDED = "not_included"
     MISSING_LABEL = "missing_label"
@@ -42,6 +43,15 @@ class Discovery:
     provider: ContainerInfo | None
     managed: list[ContainerInfo] = field(default_factory=list)
     skipped: list[Skipped] = field(default_factory=list)
+    adopted: list[ContainerInfo] = field(default_factory=list)
+    """Managed containers claimed only because their reference points at nothing.
+
+    Worth reporting separately. Adopting them is almost always right — a container
+    referencing an ID that no longer exists cannot start, and no other provider can
+    claim it either — but on a host with two providers the guess could be wrong, so
+    it should never happen silently.
+    """
+
     unresolved_includes: list[str] = field(default_factory=list)
     """Names the user asked to manage that were not found borrowing the network.
 
@@ -79,6 +89,7 @@ def discover(
 
     managed: list[ContainerInfo] = []
     skipped: list[Skipped] = []
+    adopted: list[ContainerInfo] = []
 
     for container_id in api.list_network_borrowers():
         payload = api.inspect(container_id)
@@ -88,14 +99,17 @@ def discover(
             continue
 
         container = ContainerInfo.from_inspect(payload)
-        decision = _classify(container, provider, historical, settings)
+        decision, was_adopted = _classify(api, container, provider, historical, settings)
         if decision is None:
             managed.append(container)
+            if was_adopted:
+                adopted.append(container)
         else:
             skipped.append(decision)
 
     managed.sort(key=lambda c: c.name)
     skipped.sort(key=lambda s: s.container.name)
+    adopted.sort(key=lambda c: c.name)
 
     found = {c.name for c in managed} | {s.container.name for s in skipped}
     unresolved = [name for name in settings.include if name not in found]
@@ -104,55 +118,93 @@ def discover(
         provider=provider,
         managed=managed,
         skipped=skipped,
+        adopted=adopted,
         unresolved_includes=unresolved,
     )
 
 
 def _classify(
+    api: DockerApi,
     container: ContainerInfo,
     provider: ContainerInfo | None,
     historical_provider_ids: set[str],
     settings: Settings,
-) -> Skipped | None:
-    """Return None if the container should be managed, else why it should not be."""
+) -> tuple[Skipped | None, bool]:
+    """Decide a container's fate.
+
+    Returns the reason it was set aside, or None if it should be managed, along
+    with whether managing it required adopting an orphan.
+    """
     if provider is not None and container.id == provider.id:
-        return Skipped(container, SkipReason.IS_PROVIDER, "this is the provider itself")
+        return Skipped(container, SkipReason.IS_PROVIDER, "this is the provider itself"), False
 
     ref = container.provider_ref
     if ref is None:  # pragma: no cover - the list filter already excludes these
-        return Skipped(
-            container,
-            SkipReason.OTHER_PROVIDER,
-            "does not borrow another container's network",
+        return (
+            Skipped(
+                container,
+                SkipReason.OTHER_PROVIDER,
+                "does not borrow another container's network",
+            ),
+            False,
         )
 
+    adopted = False
     if not _belongs_to_us(ref, provider, historical_provider_ids):
         expected = settings.provider
-        return Skipped(
-            container,
-            SkipReason.OTHER_PROVIDER,
-            f"borrows the network of {_short(ref)}, which is not {expected} "
-            f"or any container {expected} has previously been",
-        )
+
+        # A reference to a container that does not exist is an orphan. Nothing can
+        # claim it and it cannot start, and this is precisely the state a host is
+        # in when its provider was recreated before Tetherd was ever installed -
+        # so there is no history to recognise it by.
+        if api.exists(ref):
+            return (
+                Skipped(
+                    container,
+                    SkipReason.OTHER_PROVIDER,
+                    f"borrows the network of {_short(ref)}, which is not {expected} "
+                    f"or any container {expected} has previously been",
+                ),
+                False,
+            )
+
+        if not settings.adopt_orphans:
+            return (
+                Skipped(
+                    container,
+                    SkipReason.ORPHANED,
+                    f"points at {_short(ref)}, which no longer exists, and "
+                    "adopt_orphans is off so it is being left alone",
+                ),
+                False,
+            )
+
+        adopted = True
 
     if container.name in settings.exclude:
-        return Skipped(container, SkipReason.EXCLUDED, "listed in exclude")
+        return Skipped(container, SkipReason.EXCLUDED, "listed in exclude"), False
 
     if settings.include and container.name not in settings.include:
-        return Skipped(
-            container,
-            SkipReason.NOT_INCLUDED,
-            "include is set and this container is not in it",
+        return (
+            Skipped(
+                container,
+                SkipReason.NOT_INCLUDED,
+                "include is set and this container is not in it",
+            ),
+            False,
         )
 
     if settings.require_label and not _label_enabled(container.labels):
-        return Skipped(
-            container,
-            SkipReason.MISSING_LABEL,
-            f"require_label is on and {ENABLE_LABEL}=true is not set",
+        return (
+            Skipped(
+                container,
+                SkipReason.MISSING_LABEL,
+                f"require_label is on and {ENABLE_LABEL}=true is not set",
+            ),
+            False,
         )
 
-    return None
+    return None, adopted
 
 
 def _belongs_to_us(

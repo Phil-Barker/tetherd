@@ -32,6 +32,9 @@ class FakeDockerApi:
     def inspect(self, ref: str) -> dict[str, Any] | None:
         return self._by_ref.get(ref)
 
+    def exists(self, ref: str) -> bool:
+        return ref in self._by_ref
+
     def list_network_borrowers(self) -> list[str]:
         return [
             str(p["Id"])
@@ -78,8 +81,10 @@ def test_reports_a_missing_provider_rather_than_failing(
     result = discover(api, settings())
 
     assert result.provider_missing
-    # Without history there is no way to know the orphan was ever ours.
-    assert [s.reason for s in result.skipped] == [SkipReason.OTHER_PROVIDER]
+    # The dependent is still claimed: its reference points at nothing, so no other
+    # provider can own it and it cannot start. Reconcile will then wait.
+    assert [c.name for c in result.managed] == ["qbittorrent"]
+    assert [c.name for c in result.adopted] == ["qbittorrent"]
 
 
 def test_dependents_of_another_container_are_left_alone(
@@ -98,22 +103,49 @@ def test_dependents_of_another_container_are_left_alone(
     assert "is not gluetun" in skipped["theirs"].detail
 
 
-def test_orphan_from_a_previous_provider_is_recognised_from_history(
+def test_an_orphan_is_adopted_even_without_history(
     provider_payload: dict[str, Any],
 ) -> None:
-    """A recreated provider leaves dependents pointing at an ID that is now dead.
+    """The state a host is in when Tetherd is installed to fix it.
 
-    The reference cannot be resolved, so remembering the provider's previous
-    IDs is the only way to claim these containers.
+    The provider was recreated before Tetherd ever ran, so there is no recorded
+    history. The referenced ID exists on nothing, the container cannot start, and
+    no other provider can claim it either — so guessing is safer than leaving it.
     """
     orphan = dependent("qbittorrent", provider_ref=OLD_PROVIDER_ID)
     api = api_with(provider_payload, orphan)
 
-    without_history = discover(api, settings())
-    with_history = discover(api, settings(), known_provider_ids={OLD_PROVIDER_ID})
+    result = discover(api, settings())
 
-    assert [c.name for c in without_history.managed] == []
-    assert [c.name for c in with_history.managed] == ["qbittorrent"]
+    assert [c.name for c in result.managed] == ["qbittorrent"]
+    assert [c.name for c in result.adopted] == ["qbittorrent"]
+
+
+def test_history_turns_an_adoption_into_a_recognition(
+    provider_payload: dict[str, Any],
+) -> None:
+    """Once Tetherd has seen the provider, the guess is no longer a guess."""
+    orphan = dependent("qbittorrent", provider_ref=OLD_PROVIDER_ID)
+    api = api_with(provider_payload, orphan)
+
+    result = discover(api, settings(), known_provider_ids={OLD_PROVIDER_ID})
+
+    assert [c.name for c in result.managed] == ["qbittorrent"]
+    assert result.adopted == []
+
+
+def test_adoption_can_be_turned_off(
+    provider_payload: dict[str, Any],
+) -> None:
+    """Two providers on one host: an orphan of the other one must not be claimed."""
+    orphan = dependent("qbittorrent", provider_ref=OLD_PROVIDER_ID)
+    api = api_with(provider_payload, orphan)
+
+    result = discover(api, settings(adopt_orphans=False))
+
+    assert result.managed == []
+    assert result.skipped[0].reason is SkipReason.ORPHANED
+    assert "adopt_orphans is off" in result.skipped[0].detail
 
 
 def test_the_provider_is_never_managed_as_its_own_dependent(

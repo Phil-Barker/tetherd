@@ -46,6 +46,12 @@ class FakeDocker:
         #: Names whose restart should not refresh the start time, modelling a
         #: container that restarts without recovering.
         self.restart_is_ineffective: set[str] = set()
+        #: Binary name mapped to the (exit code, output) it should report.
+        self.exec_results: dict[str, tuple[int, str]] = {}
+        #: Binaries absent from the image, which the daemon reports distinctly
+        #: from a command that ran and failed.
+        self.missing_binaries: set[str] = set()
+        self.exec_commands: list[list[str]] = []
         self._ids = (f"{index:064x}" for index in itertools.count(1))
 
     # -- test setup --------------------------------------------------------
@@ -76,7 +82,7 @@ class FakeDocker:
 
     def start(self, ref: str) -> None:
         container = self._require("start", ref)
-        container["State"] = {"Running": True, "StartedAt": self.clock.tick()}
+        container["State"] = self._started_state(container)
 
     def stop(self, ref: str, timeout: int = 30) -> None:
         del timeout
@@ -90,7 +96,18 @@ class FakeDocker:
         if name in self.restart_is_ineffective:
             container["State"] = {**container.get("State", {}), "Running": True}
             return
-        container["State"] = {"Running": True, "StartedAt": self.clock.tick()}
+        container["State"] = self._started_state(container)
+
+    def _started_state(self, container: Mapping[str, Any]) -> dict[str, Any]:
+        """Fresh run state, with health reset the way the daemon resets it.
+
+        A restarted container re-enters its healthcheck start period rather than
+        carrying its previous verdict forward.
+        """
+        state: dict[str, Any] = {"Running": True, "StartedAt": self.clock.tick()}
+        if "Health" in (container.get("State") or {}):
+            state["Health"] = {"Status": "starting", "Log": []}
+        return state
 
     def rename(self, ref: str, new_name: str) -> None:
         container = self._require("rename", ref)
@@ -123,6 +140,21 @@ class FakeDocker:
         self.operations.append(f"create:{name}")
         return container_id
 
+    def exec_probe(self, ref: str, command: list[str], timeout: float) -> tuple[int, str]:
+        del timeout
+        self._maybe_fail("exec", ref)
+        self._require_exists("probe", ref)
+        self.exec_commands.append(list(command))
+
+        binary = command[0]
+        if binary in self.missing_binaries:
+            raise ContainerOperationError(
+                "probe",
+                ref,
+                f'OCI runtime exec failed: exec: "{binary}": executable file not found in $PATH',
+            )
+        return self.exec_results.get(binary, (0, ""))
+
     def find_by_name_suffix(self, suffix: str) -> list[tuple[str, str]]:
         return [
             (container_id, self.name_of(container_id))
@@ -149,10 +181,14 @@ class FakeDocker:
 
     def _require(self, operation: str, ref: str) -> dict[str, Any]:
         self._maybe_fail(operation, ref)
+        container = self._require_exists(operation, ref)
+        self.operations.append(f"{operation}:{str(container['Name']).lstrip('/')}")
+        return container
+
+    def _require_exists(self, operation: str, ref: str) -> dict[str, Any]:
         resolved = self._resolve(ref)
         if resolved is None:
             raise ContainerOperationError(operation, ref, "no such container")
-        self.operations.append(f"{operation}:{self.name_of(resolved)}")
         return self.containers[resolved]
 
     def _maybe_fail(self, operation: str, ref: str) -> None:

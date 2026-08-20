@@ -21,21 +21,35 @@ def make_inspect(
     labels: dict[str, str] | None = None,
     image: str = "alpine:3.22",
     extra_host_config: dict[str, Any] | None = None,
+    healthcheck: list[str] | None = None,
+    health_status: str | None = None,
+    health_output: str | None = None,
 ) -> dict[str, Any]:
     """Build a minimal but structurally faithful inspect payload."""
+    state: dict[str, Any] = {
+        "Running": running,
+        "StartedAt": started_at or "0001-01-01T00:00:00Z",
+    }
+    if health_status is not None:
+        state["Health"] = {
+            "Status": health_status,
+            "Log": [{"Output": health_output}] if health_output is not None else [],
+        }
+
+    config: dict[str, Any] = {
+        "Image": image,
+        "Labels": labels or {},
+        "Cmd": ["sh", "-c", "while true; do sleep 30; done"],
+        "Env": ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"],
+    }
+    if healthcheck is not None:
+        config["Healthcheck"] = {"Test": healthcheck}
+
     return {
         "Id": container_id,
         "Name": f"/{name}",
-        "State": {
-            "Running": running,
-            "StartedAt": started_at or "0001-01-01T00:00:00Z",
-        },
-        "Config": {
-            "Image": image,
-            "Labels": labels or {},
-            "Cmd": ["sh", "-c", "while true; do sleep 30; done"],
-            "Env": ["PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"],
-        },
+        "State": state,
+        "Config": config,
         "HostConfig": {
             "NetworkMode": network_mode,
             "RestartPolicy": {"Name": "unless-stopped", "MaximumRetryCount": 0},

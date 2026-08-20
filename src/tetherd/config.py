@@ -73,6 +73,16 @@ class ProbeSettings(BaseModel):
         ge=0,
         description="Grace period after restarting the provider before repairing dependents.",
     )
+    min_restart_interval_seconds: float = Field(
+        default=300.0,
+        ge=0,
+        description=(
+            "Floor on how often the provider may be restarted. Nothing inside a "
+            "tunnel can tell a dead tunnel from an ISP outage, and without this "
+            "an outage would restart the VPN container in a loop and take every "
+            "dependent down with it on each pass."
+        ),
+    )
 
 
 class NotifySettings(BaseModel):

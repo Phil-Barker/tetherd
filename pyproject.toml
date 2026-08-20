@@ -80,8 +80,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# The CLI is the one place printing to stdout is the point.
-"src/tetherd/cli.py" = ["T20"]
+# The CLI is the one place printing to stdout is the point, and Typer's
+# recommended default of typer.Option() in argument lists trips B008.
+"src/tetherd/cli.py" = ["T20", "B008"]
 "tests/*" = ["S101"]
 
 [tool.mypy]

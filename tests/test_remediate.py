@@ -462,3 +462,17 @@ class TestCrashRecovery:
 
         assert docker.by_name(f"qbittorrent{ASIDE_SUFFIX}")["Id"] == "e" * 64  # type: ignore[index]
         assert docker.by_name("qbittorrent")["Id"] == DEPENDENT  # type: ignore[index]
+
+
+class TestForcedRebuild:
+    def test_an_operator_can_rebuild_a_healthy_container(
+        self, docker: FakeDocker, store: SnapshotStore
+    ) -> None:
+        """tetherd rebuild: the timestamps would have left it alone."""
+        dependent, provider = scenario(docker)
+
+        result = build(docker, store).rebuild(dependent, provider)
+
+        assert result.succeeded, result.detail
+        assert result.verdict is Verdict.FORCED
+        assert docker.by_name("qbittorrent")["Id"] != DEPENDENT  # type: ignore[index]

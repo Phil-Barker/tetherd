@@ -130,6 +130,14 @@ class Remediator:
 
         return self._recreate(container, provider, assessment.verdict)
 
+    def rebuild(self, container: ContainerInfo, provider: ContainerInfo) -> RemediationResult:
+        """Rebuild regardless of assessed health.
+
+        The ``tetherd rebuild`` command: the operator asked, so a restart is not
+        a substitute even if the timestamps would have allowed one.
+        """
+        return self._recreate(container, provider, Verdict.FORCED)
+
     def recover_interrupted(self) -> list[RemediationResult]:
         """Restore any container left renamed aside by an interrupted rebuild.
 

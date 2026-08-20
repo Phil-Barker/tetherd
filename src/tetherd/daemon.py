@@ -20,6 +20,7 @@ import signal
 import threading
 import time
 from collections.abc import Callable, Iterator, Mapping, Set
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
@@ -60,6 +61,24 @@ _LOCK_MODE: Final = 0o644
 
 class AlreadyRunningError(RuntimeError):
     """Another Tetherd process holds the instance lock."""
+
+
+@dataclass
+class Runtime:
+    """The collaborators a process needs, wired once from configuration."""
+
+    settings: Settings
+    api: DockerApi
+    snapshots: SnapshotStore
+    remediator: Remediator
+    reconciler: Reconciler
+    monitor: ProviderMonitor
+    notifier: Notifier
+    lock: InstanceLock
+    state: ProviderStateStore
+
+    def close(self) -> None:
+        self.api.close()
 
 
 class InstanceLock:
@@ -295,7 +314,7 @@ def event_is_interesting(
     return action in {"create", "start"}
 
 
-def assemble(settings: Settings) -> tuple[DockerApi, Reconciler, Notifier, InstanceLock]:
+def assemble(settings: Settings) -> Runtime:
     """Build the long-running collaborators from configuration.
 
     Kept here so the CLI and the daemon share one wiring, and so tests can swap
@@ -309,17 +328,27 @@ def assemble(settings: Settings) -> tuple[DockerApi, Reconciler, Notifier, Insta
         dry_run=settings.dry_run,
         restart_grace_seconds=settings.restart_grace_seconds,
     )
+    state = ProviderStateStore(settings.provider_state_file)
+    monitor = ProviderMonitor(api, settings.probe)
     reconciler = Reconciler(
         api,
         settings,
         snapshots=snapshots,
         remediator=remediator,
-        monitor=ProviderMonitor(api, settings.probe),
-        state=ProviderStateStore(settings.provider_state_file),
+        monitor=monitor,
+        state=state,
     )
-    notifier = build_notifier(settings.notify)
-    lock = InstanceLock(settings.state_dir / "tetherd.lock")
-    return api, reconciler, notifier, lock
+    return Runtime(
+        settings=settings,
+        api=api,
+        snapshots=snapshots,
+        remediator=remediator,
+        reconciler=reconciler,
+        monitor=monitor,
+        notifier=build_notifier(settings.notify),
+        lock=InstanceLock(settings.state_dir / "tetherd.lock"),
+        state=state,
+    )
 
 
 def _log_report(report: ReconcileReport) -> None:

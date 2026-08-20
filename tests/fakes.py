@@ -81,6 +81,12 @@ class FakeDocker:
     def exists(self, ref: str) -> bool:
         return self._resolve(ref) is not None
 
+    def ping(self) -> bool:
+        return True
+
+    def version(self) -> str:
+        return "fake"
+
     def start(self, ref: str) -> None:
         container = self._require("start", ref)
         container["State"] = self._started_state(container)

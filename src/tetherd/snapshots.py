@@ -25,8 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import tempfile
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -34,6 +32,7 @@ from pathlib import Path
 from typing import Any, Final
 
 from .models import CONTAINER_NETWORK_PREFIX
+from .storage import StorageError, read_json, write_json_atomically
 
 #: Bumped only if the envelope's shape changes incompatibly. Older snapshots are
 #: read on a best-effort basis rather than discarded, because a snapshot Tetherd
@@ -216,13 +215,11 @@ class SnapshotStore:
             "inspect": snapshot.payload,
         }
 
-        directory = snapshot.path.parent
         try:
-            directory.mkdir(parents=True, exist_ok=True)
-            _write_atomically(snapshot.path, json.dumps(envelope, indent=2, sort_keys=True))
-        except OSError as exc:
+            write_json_atomically(snapshot.path, envelope)
+        except StorageError as exc:
             raise SnapshotError(
-                f"cannot write a snapshot for {snapshot.container} to {directory}: {exc}. "
+                f"cannot record a configuration for {snapshot.container}: {exc} "
                 "Tetherd needs a writable state directory to rebuild containers later."
             ) from exc
 
@@ -241,35 +238,13 @@ def _sequence_of(path: Path) -> int:
     return int(leading) if leading.isdigit() else -1
 
 
-def _write_atomically(path: Path, text: str) -> None:
-    """Write via a temporary file in the same directory, then rename.
-
-    A half-written snapshot is worse than no snapshot, because it looks like a
-    recoverable configuration until it is read.
-    """
-    handle, name = tempfile.mkstemp(dir=path.parent, prefix=".tetherd-", suffix=".tmp")
-    temporary = Path(name)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        temporary.replace(path)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
-
-
 def _read(path: Path) -> Snapshot | None:
     """Read one snapshot, or None if it is unusable.
 
     Deliberately forgiving: a single corrupt file must not hide the good
     snapshots stored alongside it.
     """
-    try:
-        envelope = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+    envelope = read_json(path)
     if not isinstance(envelope, dict):
         return None
 

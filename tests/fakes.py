@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from tetherd.docker_api import ContainerOperationError
+from tetherd.models import CONTAINER_NETWORK_PREFIX
 
 _ZERO_TIME = "0001-01-01T00:00:00Z"
 
@@ -160,6 +161,15 @@ class FakeDocker:
             (container_id, self.name_of(container_id))
             for container_id in sorted(self.containers)
             if self.name_of(container_id).endswith(suffix)
+        ]
+
+    def list_network_borrowers(self) -> list[str]:
+        return [
+            container_id
+            for container_id, container in sorted(self.containers.items())
+            if str((container.get("HostConfig") or {}).get("NetworkMode", "")).startswith(
+                CONTAINER_NETWORK_PREFIX
+            )
         ]
 
     def find_by_name_prefix(self, prefix: str) -> list[str]:

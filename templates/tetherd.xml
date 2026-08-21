@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Container version="2">
+  <Name>tetherd</Name>
+  <Repository>philbarker79/tetherd:latest</Repository>
+  <Registry>https://hub.docker.com/r/philbarker79/tetherd</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Phil-Barker/tetherd/issues</Support>
+  <Project>https://github.com/Phil-Barker/tetherd</Project>
+  <Overview>Keeps containers attached to the network of the container they route through, such as apps using --network container:gluetun. When the VPN container restarts, those apps stay running but go offline; Tetherd repairs that with a restart where possible, and only rebuilds when the VPN container was recreated. Clean-room successor to Rebuild-DNDC: it reads live Docker config, not Unraid XML. Stop Rebuild-DNDC before installing. Needs the Docker socket, same trade-off as Watchtower. After install, docker exec tetherd tetherd doctor. Set restart policy to Unless Stopped.</Overview>
+  <Category>Tools:Utilities</Category>
+  <ExtraSearchTerms>vpn gluetun wireguard rebuild-dndc docker network sidecar</ExtraSearchTerms>
+  <Requires>A container whose network others borrow (typically a VPN sidecar such as gluetun). Host access to the Docker socket. Stop Rebuild-DNDC first if it is still running.</Requires>
+  <Icon>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/img/tetherd-logo-500px.png</Icon>
+  <TemplateURL>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/templates/tetherd.xml</TemplateURL>
+  <ReadMe>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/README.md</ReadMe>
+  <Changes>Initial public release.</Changes>
+  <Date>2026-08-21</Date>
+  <MinVer>7.0</MinVer>
+  <License>MIT</License>
+
+  <Config Name="Provider" Target="TETHERD_PROVIDER" Default="" Mode="" Description="Exact name of the VPN/network-provider container (e.g. GluetunVPN). Case-sensitive; match docker ps." Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="Appdata" Target="/config" Default="/mnt/user/appdata/tetherd" Mode="rw" Description="Snapshots and provider ID history." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tetherd</Config>
+  <Config Name="Docker Socket" Target="/var/run/docker.sock" Default="/var/run/docker.sock" Mode="rw" Description="Host Docker socket. Required, same as Watchtower." Type="Path" Display="always" Required="true" Mask="false">/var/run/docker.sock</Config>
+  <Config Name="Unraid notifier" Target="/usr/local/emhttp" Default="/usr/local/emhttp" Mode="ro" Description="Unraid webGui, so repairs appear in the notification bell." Type="Path" Display="always" Required="false" Mask="false">/usr/local/emhttp</Config>
+  <Config Name="Docker templates" Target="/config/docker-templates" Default="/boot/config/plugins/dockerMan/templates-user" Mode="ro" Description="User templates, read-only, for tetherd doctor. Tetherd never rebuilds from these files." Type="Path" Display="always" Required="false" Mask="false">/boot/config/plugins/dockerMan/templates-user</Config>
+  <Config Name="Timezone" Target="TZ" Default="UTC" Mode="" Description="Container timezone." Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
+  <Config Name="Include" Target="TETHERD_INCLUDE" Default="" Mode="" Description="If set, only these dependents are managed. Exact names, space or comma separated." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Exclude" Target="TETHERD_EXCLUDE" Default="" Mode="" Description="Dependents to leave alone. Exact names, space or comma separated." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Probe provider" Target="TETHERD_PROBE__ENABLED" Default="false" Mode="" Description="Actively test that the VPN container can route. Leave false if the image already has a healthcheck (gluetun does)." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Notify URLs" Target="TETHERD_NOTIFY__URLS" Default="" Mode="" Description="Apprise URLs (Discord, Telegram, Gotify, ntfy, …). Unraid's own notifier is already used when the emhttp path is mounted." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Log level" Target="TETHERD_LOG_LEVEL" Default="INFO" Mode="" Description="DEBUG, INFO, WARNING or ERROR." Type="Variable" Display="advanced" Required="false" Mask="false">INFO</Config>
+</Container>

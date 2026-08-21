@@ -1,3 +1,6 @@
+<img src="img/tetherd-logo-500px.png" alt="Tetherd" width="96" height="96">
+
+
 # Tetherd
 
 Keeps containers attached to the network of the container they route through.
@@ -54,8 +57,12 @@ docker run -d \
   -e TETHERD_PROVIDER=gluetun \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v /path/to/appdata/tetherd:/config \
-  tetherd:local
+  philbarker79/tetherd
 ```
+
+Published images live on Docker Hub as `philbarker79/tetherd` and on GHCR as
+`ghcr.io/phil-barker/tetherd`. `tetherd:local` is the tag this repo's
+Dockerfile builds for development.
 
 On Unraid, also mount the notifier and the user templates if you want native
 notifications and a template audit from `tetherd doctor`:
@@ -67,9 +74,9 @@ notifications and a template audit from `tetherd doctor`:
 
 `compose.yaml` in this repo is the same thing, for a generic Docker host.
 
-Coming from Rebuild-DNDC, `tetherd import-rdndc --env-file old.env` prints a
-YAML or environment block you can drop in. It will also tell you what it
-refused to guess.
+Coming from Rebuild-DNDC, stop that container first, then
+`tetherd import-rdndc --env-file old.env`. Details in
+[docs/migration.md](docs/migration.md).
 
 Useful commands, from another shell against a running container:
 
@@ -78,6 +85,19 @@ docker exec tetherd tetherd status
 docker exec tetherd tetherd doctor
 docker exec tetherd tetherd rebuild qbittorrent --dry-run
 ```
+
+More in [docs/quick-start.md](docs/quick-start.md).
+
+## Documentation
+
+- [Quick start](docs/quick-start.md)
+- [Network wiring](docs/network-wiring.md) — `container:` vs Extra Params, ports, two providers
+- [Configuration](docs/configuration.md)
+- [Migrating from Rebuild-DNDC](docs/migration.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Unraid](docs/unraid.md) — why this is still needed on 7.x, labels, templates
+- [Publishing](docs/publishing.md) — Docker Hub, GHCR, Community Applications
+- [Design notes](docs/design-notes.md) — empirical Docker and Unraid findings the code depends on
 
 ## Requirements
 
@@ -99,6 +119,22 @@ docker build -t tetherd:local .
 `scripts/spike-netns.sh` verifies the Docker behaviours the design relies on
 against your local daemon. The findings are written up in
 [docs/design-notes.md](docs/design-notes.md).
+
+## Transparency
+
+I'm Phil Barker. I've been a software engineer for thirty years. This
+repository is co-developed with [Cursor](https://cursor.com), an AI coding
+assistant.
+
+I'm putting that in the README because a lot of people in open source and
+homelab are, reasonably, tired of unreviewed generated code landing on GitHub.
+I designed the behaviour this tool has to have, I review every change, and the
+tests encode failure modes that were found the hard way on real Unraid boxes —
+including mine. Cursor is a faster pair-programmer. It is not an unsupervised
+author, and it does not get a commit I have not read.
+
+If that still makes this the wrong project for you, that is a fair call. I'd
+rather you knew how it was made than find out from a git blame later.
 
 ## Credits
 

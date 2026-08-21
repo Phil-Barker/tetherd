@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommunityApplications>
+  <Profile>
+Phil Barker. Tetherd is a Docker helper that keeps containers attached to the
+network of the container they route through — typically apps sharing a VPN
+sidecar such as gluetun.
+
+It is a clean-room successor to Rebuild-DNDC: same job, no shared code, MIT
+licensed. Support is via GitHub issues until an Unraid forum thread exists;
+update this file with that thread URL when it does.
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/img/tetherd-logo-500px.png</Icon>
+  <WebPage>https://github.com/Phil-Barker/tetherd</WebPage>
+  <Forum>https://github.com/Phil-Barker/tetherd/issues</Forum>
+</CommunityApplications>

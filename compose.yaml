@@ -1,10 +1,11 @@
-# Local / generic Docker Compose. Unraid users should use the CA template
-# (when it exists) rather than this file: Unraid's own UI does not read it.
+# Local / generic Docker Compose. Unraid users should use the Community
+# Applications template rather than this file: Unraid's own UI does not read it.
+# The published image is philbarker79/tetherd; `build:` is for developing this repo.
 
 services:
   tetherd:
     build: .
-    image: tetherd:local
+    image: philbarker79/tetherd:latest
     container_name: tetherd
     restart: unless-stopped
     init: true

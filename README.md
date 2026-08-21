@@ -40,6 +40,45 @@ Tetherd distinguishes the two ways networking breaks:
 
 Deliberately stopped containers also stay stopped.
 
+## Running it
+
+The image talks to the host Docker socket. It runs as root for the same reason
+Watchtower does: that socket is typically `root:docker` mode `660`, and Unraid
+will not set `--group-add` for you.
+
+```bash
+docker run -d \
+  --name tetherd \
+  --restart unless-stopped \
+  -e TZ=Europe/London \
+  -e TETHERD_PROVIDER=gluetun \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /path/to/appdata/tetherd:/config \
+  tetherd:local
+```
+
+On Unraid, also mount the notifier and the user templates if you want native
+notifications and a template audit from `tetherd doctor`:
+
+```
+-v /usr/local/emhttp:/usr/local/emhttp:ro
+-v /boot/config/plugins/dockerMan/templates-user:/config/docker-templates:ro
+```
+
+`compose.yaml` in this repo is the same thing, for a generic Docker host.
+
+Coming from Rebuild-DNDC, `tetherd import-rdndc --env-file old.env` prints a
+YAML or environment block you can drop in. It will also tell you what it
+refused to guess.
+
+Useful commands, from another shell against a running container:
+
+```bash
+docker exec tetherd tetherd status
+docker exec tetherd tetherd doctor
+docker exec tetherd tetherd rebuild qbittorrent --dry-run
+```
+
 ## Requirements
 
 - Docker Engine 20.10 or newer
@@ -54,6 +93,7 @@ uv run pytest -m 'not integration'    # unit tests
 uv run pytest -m integration          # needs a live daemon
 uv run ruff check .
 uv run mypy
+docker build -t tetherd:local .
 ```
 
 `scripts/spike-netns.sh` verifies the Docker behaviours the design relies on

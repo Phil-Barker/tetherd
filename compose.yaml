@@ -1,0 +1,24 @@
+# Local / generic Docker Compose. Unraid users should use the CA template
+# (when it exists) rather than this file: Unraid's own UI does not read it.
+
+services:
+  tetherd:
+    build: .
+    image: tetherd:local
+    container_name: tetherd
+    restart: unless-stopped
+    init: true
+    environment:
+      TETHERD_PROVIDER: gluetun
+      TZ: Europe/London
+      # TETHERD_PROBE__ENABLED: "true"
+      # TETHERD_INCLUDE: qbittorrent prowlarr
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - tetherd-config:/config
+      # Unraid only: native notifications and a read-only template audit.
+      # - /usr/local/emhttp:/usr/local/emhttp:ro
+      # - /boot/config/plugins/dockerMan/templates-user:/config/docker-templates:ro
+
+volumes:
+  tetherd-config:

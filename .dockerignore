@@ -1,0 +1,22 @@
+# The local venv is the one thing that *must* stay out: copying it in would
+# replace the image's environment with one built for the host.
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+.git/
+.github/
+.cursor/
+tests/
+docs/
+img/
+scripts/
+state/
+*.md
+!README.md
+LICENSE

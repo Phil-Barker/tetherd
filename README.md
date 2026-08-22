@@ -64,10 +64,11 @@ Published images live on Docker Hub as `philbarker79/tetherd` and on GHCR as
 `ghcr.io/phil-barker/tetherd`. `tetherd:local` is the tag this repo's
 Dockerfile builds for development.
 
-On Unraid, also mount the notifier and the user templates if you want native
-notifications and a template audit from `tetherd doctor`:
+On Unraid, also mount notifications, the webGui marker, and the user templates
+if you want the notification bell and a template audit from `tetherd doctor`:
 
 ```
+-v /tmp/notifications:/tmp/notifications
 -v /usr/local/emhttp:/usr/local/emhttp:ro
 -v /boot/config/plugins/dockerMan/templates-user:/config/docker-templates:ro
 ```

@@ -17,7 +17,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - tetherd-config:/config
-      # Unraid only: native notifications and a read-only template audit.
+      # Unraid only: native notifications, host marker, and a read-only template audit.
+      # - /tmp/notifications:/tmp/notifications
       # - /usr/local/emhttp:/usr/local/emhttp:ro
       # - /boot/config/plugins/dockerMan/templates-user:/config/docker-templates:ro
 

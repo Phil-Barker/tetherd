@@ -59,8 +59,9 @@ UNUSED_LABEL_TEMPLATE = "net.unraid.docker.template"
 #: Present on an Unraid host, and nowhere else.
 UNRAID_MARKER = Path("/usr/local/emhttp")
 
-#: Unraid's own notifier, used when running on an Unraid host.
-UNRAID_NOTIFY = Path("/usr/local/emhttp/webGui/scripts/notify")
+#: Unraid's notification directory. The GraphQL API watches .notify files here;
+#: writing them is how the UI bell updates without running the host PHP script.
+UNRAID_NOTIFY_DIR = Path("/tmp/notifications")
 
 DEFAULT_TEMPLATE_DIR = Path("/config/docker-templates")
 

@@ -32,7 +32,8 @@ JSON into a web form.
 | probe.settle_seconds | `TETHERD_PROBE__SETTLE_SECONDS` | 10 | Wait after restarting the provider before repairing dependents. |
 | probe.min_restart_interval_seconds | `TETHERD_PROBE__MIN_RESTART_INTERVAL_SECONDS` | 300 | Floor so an ISP outage does not restart the VPN container in a loop. |
 | notify.urls | `TETHERD_NOTIFY__URLS` | empty | [Apprise](https://github.com/caronc/apprise) URLs. |
-| notify.unraid | `TETHERD_NOTIFY__UNRAID` | true | Use Unraid's notifier when `/usr/local/emhttp/webGui/scripts/notify` is present. Harmless elsewhere. |
+| notify.unraid | `TETHERD_NOTIFY__UNRAID` | true | Write Unraid `.notify` files when `/tmp/notifications` is mounted. Harmless elsewhere. |
+| notify.unraid_path | `TETHERD_NOTIFY__UNRAID_PATH` | `/tmp/notifications` | Bind-mount the host directory here. |
 | notify.hook | `TETHERD_NOTIFY__HOOK` | empty | Executable run after a remediation, with `TETHERD_*` in its environment. |
 | notify.notify_on_healthy_runs | `TETHERD_NOTIFY__NOTIFY_ON_HEALTHY_RUNS` | false | Otherwise a quiet pass is silent, on purpose. |
 

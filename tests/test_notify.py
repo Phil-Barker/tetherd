@@ -92,36 +92,54 @@ class TestContainment:
 
 
 class TestUnraidSink:
-    def test_it_is_unavailable_when_the_script_is_absent(self, tmp_path: Path) -> None:
+    def test_it_is_unavailable_when_the_directory_is_absent(self, tmp_path: Path) -> None:
         """Which is the case on every machine that is not Unraid."""
-        assert UnraidSink(tmp_path / "notify").available is False
+        assert UnraidSink(tmp_path / "notifications").available is False
 
-    def test_it_is_unavailable_when_the_script_is_not_executable(self, tmp_path: Path) -> None:
-        script = tmp_path / "notify"
-        script.write_text("#!/bin/sh\n")
+    def test_it_is_unavailable_when_the_directory_is_not_writable(self, tmp_path: Path) -> None:
+        directory = tmp_path / "notifications"
+        directory.mkdir()
+        directory.chmod(stat.S_IRUSR | stat.S_IXUSR)
 
-        assert UnraidSink(script).available is False
+        assert UnraidSink(directory).available is False
 
-    def test_it_calls_the_script_with_unraids_own_vocabulary(self, tmp_path: Path) -> None:
-        script = executable(tmp_path / "notify", f'printf "%s\\n" "$@" > {tmp_path}/args')
+        directory.chmod(stat.S_IRWXU)
 
-        UnraidSink(script).send(
+    def test_it_writes_the_ini_format_unraid_watches(self, tmp_path: Path) -> None:
+        directory = tmp_path / "notifications"
+        directory.mkdir()
+
+        UnraidSink(directory).send(
             Notification(
                 title="Provider down", message="gluetun is unhealthy", severity=Severity.ERROR
             )
         )
 
-        arguments = (tmp_path / "args").read_text().splitlines()
-        assert arguments == [
-            "-e",
-            "Tetherd",
-            "-s",
-            "Provider down",
-            "-d",
-            "gluetun is unhealthy",
-            "-i",
-            "alert",
-        ]
+        unread = list((directory / "unread").glob("*.notify"))
+        archive = list((directory / "archive").glob("*.notify"))
+        assert len(unread) == 1
+        assert len(archive) == 1
+        assert unread[0].name == archive[0].name
+
+        body = unread[0].read_text()
+        assert "event=Tetherd\n" in body
+        assert "subject=Provider down\n" in body
+        assert "description=gluetun is unhealthy\n" in body
+        assert "importance=alert\n" in body
+        assert body.split("timestamp=", 1)[1].split("\n", 1)[0].isdigit()
+
+    def test_newlines_in_the_description_do_not_break_the_ini(self, tmp_path: Path) -> None:
+        directory = tmp_path / "notifications"
+        directory.mkdir()
+
+        UnraidSink(directory).send(
+            Notification(title="Rebuilt", message="line one\nline two", severity=Severity.WARNING)
+        )
+
+        body = next((directory / "unread").glob("*.notify")).read_text()
+        assert "description=line one line two\n" in body
+        assert body.endswith("\n")
+        assert body.count("\n") == 5
 
     @pytest.mark.parametrize(
         ("severity", "importance"),
@@ -135,12 +153,6 @@ class TestUnraidSink:
         self, severity: Severity, importance: str
     ) -> None:
         assert severity.unraid_importance == importance
-
-    def test_a_failing_script_is_reported_with_its_own_output(self, tmp_path: Path) -> None:
-        script = executable(tmp_path / "notify", "echo 'no such event' >&2; exit 2")
-
-        with pytest.raises(NotificationError, match="no such event"):
-            UnraidSink(script).send(Notification(title="t", message="m"))
 
 
 class TestHookSink:
@@ -185,6 +197,14 @@ class TestBuildingFromConfiguration:
 
         assert notifier.sink_names == []
 
+    def test_unraid_is_configured_when_its_directory_is_writable(self, tmp_path: Path) -> None:
+        directory = tmp_path / "notifications"
+        directory.mkdir()
+
+        notifier = build_notifier(NotifySettings(unraid=True, unraid_path=directory))
+
+        assert notifier.sink_names == ["unraid"]
+
     def test_apprise_is_configured_when_urls_are_given(self) -> None:
         notifier = build_notifier(NotifySettings(unraid=False, urls=["json://localhost/"]))
 
@@ -213,6 +233,18 @@ class TestBuildingFromConfiguration:
         hook = executable(tmp_path / "hook", "true")
 
         assert describe_unavailable(NotifySettings(unraid=False, hook=hook)) == []
+
+    def test_a_missing_unraid_notify_directory_is_reported_on_unraid(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("tetherd.notify.is_unraid_host", lambda: True)
+
+        problems = describe_unavailable(
+            NotifySettings(unraid=True, unraid_path=tmp_path / "missing")
+        )
+
+        assert len(problems) == 1
+        assert "/tmp/notifications" in problems[0]
 
 
 class TestCredentialHandling:

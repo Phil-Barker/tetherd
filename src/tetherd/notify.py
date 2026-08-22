@@ -9,16 +9,18 @@ into a failure, or delay the next one — so every sink is wrapped, every failur
 collected rather than raised, and everything with a network or a subprocess in it
 has a timeout. The worst outcome of a broken notifier is a logged warning.
 
-Unraid's notifier is preferred where it exists because it puts the message in the
-place a user is already looking: the web UI's notification bell, and whatever
-email or agent they have configured there. The recon of a live 7.3.2 host
-confirmed the script's location.
+Unraid's notifier writes the same ``.notify`` INI files that Unraid 7's GraphQL
+API watches. That is how the UI bell updates. The host ``notify`` script is PHP
+and cannot run in this image; Unraid's own API falls back to the same files when
+that script fails. Email and notification *agents* still need Apprise or a hook.
 """
 
 from __future__ import annotations
 
 import os
 import subprocess
+import time
+import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -26,9 +28,8 @@ from pathlib import Path
 from typing import Final, Protocol
 
 from .config import NotifySettings
-
-#: Confirmed present on Unraid 7.3.2 by scripts/unraid-recon.sh.
-UNRAID_NOTIFY_SCRIPT: Final = Path("/usr/local/emhttp/webGui/scripts/notify")
+from .storage import StorageError, write_text_atomically
+from .unraid import UNRAID_NOTIFY_DIR, is_unraid_host
 
 _SUBPROCESS_TIMEOUT: Final = 30.0
 _EVENT_NAME: Final = "Tetherd"
@@ -85,10 +86,17 @@ class Sink(Protocol):
 
 
 class UnraidSink:
-    """Unraid's native notifier, which surfaces in the web UI's notification bell."""
+    """Unraid's notification bell, via the on-disk format its API already watches.
 
-    def __init__(self, script: Path = UNRAID_NOTIFY_SCRIPT) -> None:
-        self._script = script
+    Unraid 7 stores each notification as an INI ``.notify`` file under
+    ``/tmp/notifications/{unread,archive}``. The GraphQL layer is a watcher on
+    that directory, not a separate store. Writing the files is therefore the
+    supported way to notify from a container that cannot run the host PHP
+    interpreter.
+    """
+
+    def __init__(self, directory: Path = UNRAID_NOTIFY_DIR) -> None:
+        self._directory = directory
 
     @property
     def name(self) -> str:
@@ -96,22 +104,27 @@ class UnraidSink:
 
     @property
     def available(self) -> bool:
-        return self._script.is_file() and os.access(self._script, os.X_OK)
+        return self._directory.is_dir() and os.access(self._directory, os.W_OK)
 
     def send(self, notification: Notification) -> None:
-        _run(
-            [
-                str(self._script),
-                "-e",
-                _EVENT_NAME,
-                "-s",
-                notification.title,
-                "-d",
-                notification.message,
-                "-i",
-                notification.severity.unraid_importance,
-            ]
+        stamp = int(time.time())
+        name = f"{_EVENT_NAME}-{stamp}-{uuid.uuid4().hex[:8]}.notify"
+        body = _unraid_ini(
+            {
+                "timestamp": str(stamp),
+                "event": _EVENT_NAME,
+                "subject": notification.title,
+                "description": notification.message,
+                "importance": notification.severity.unraid_importance,
+            }
         )
+        # Archive first, then unread, matching the host script so the bell is
+        # the last filesystem event the UI watcher sees.
+        try:
+            write_text_atomically(self._directory / "archive" / name, body)
+            write_text_atomically(self._directory / "unread" / name, body)
+        except StorageError as exc:
+            raise NotificationError(str(exc)) from exc
 
 
 class AppriseSink:
@@ -207,7 +220,7 @@ def build_notifier(settings: NotifySettings) -> Notifier:
     sinks: list[Sink] = []
 
     if settings.unraid:
-        unraid = UnraidSink()
+        unraid = UnraidSink(settings.unraid_path)
         if unraid.available:
             sinks.append(unraid)
 
@@ -231,6 +244,13 @@ def describe_unavailable(settings: NotifySettings) -> list[str]:
     """
     problems: list[str] = []
 
+    if settings.unraid and is_unraid_host() and not UnraidSink(settings.unraid_path).available:
+        problems.append(
+            f"{settings.unraid_path} is not a writable Unraid notification directory. "
+            "Mount the host path /tmp/notifications read-write. Unraid's notify "
+            "script is PHP and cannot run in this image."
+        )
+
     if settings.hook is not None and not HookSink(settings.hook).available:
         problems.append(
             f"the notification hook {settings.hook} is not an executable file, so it "
@@ -238,6 +258,18 @@ def describe_unavailable(settings: NotifySettings) -> list[str]:
         )
 
     return problems
+
+
+def _unraid_ini(fields: Mapping[str, str]) -> str:
+    """The line-oriented INI Unraid's notify files actually are.
+
+    Not ConfigParser: Unraid has no sections, and a description may contain ``=``.
+    """
+    lines: list[str] = []
+    for key, value in fields.items():
+        flattened = " ".join(value.splitlines()).replace("\r", " ")
+        lines.append(f"{key}={flattened}")
+    return "\n".join(lines) + "\n"
 
 
 def _run(command: Sequence[str], environment: Mapping[str, str] | None = None) -> None:

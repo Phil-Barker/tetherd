@@ -92,7 +92,14 @@ class NotifySettings(BaseModel):
     )
     unraid: bool = Field(
         default=True,
-        description="Use Unraid's native notifier when its host script is present.",
+        description=(
+            "Write Unraid .notify files when /tmp/notifications is mounted. "
+            "The host PHP notify script cannot run inside this image."
+        ),
+    )
+    unraid_path: Path = Field(
+        default=Path("/tmp/notifications"),
+        description="Unraid's notification directory on the host, bind-mounted into the container.",
     )
     hook: Path | None = Field(
         default=None,

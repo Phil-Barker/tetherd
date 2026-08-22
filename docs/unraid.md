@@ -31,21 +31,26 @@ healthcheck (gluetun ships one) or an exec probe.
 
 ## Extra mounts
 
-The generic run in the README is enough to repair containers. These two
-unlock Unraid-native behaviour:
+The generic run in the README is enough to repair containers. These extra
+mounts unlock Unraid-native behaviour:
 
 ```
+-v /tmp/notifications:/tmp/notifications
 -v /usr/local/emhttp:/usr/local/emhttp:ro
 -v /boot/config/plugins/dockerMan/templates-user:/config/docker-templates:ro
 ```
 
-The first is Unraid's notifier (`webGui/scripts/notify`). With
-`TETHERD_NOTIFY__UNRAID=true` (the default) a repair shows up in the
-notification bell, and in whatever email or agents you already configured
-there. The path was confirmed present on 7.3.2.
+`/tmp/notifications` is where Unraid 7 stores `.notify` files. Tetherd writes
+those directly: Unraid's GraphQL API watches the directory, which is how the
+bell updates. The host `notify` script is PHP and cannot run in this image —
+Unraid's own API falls back to the same files when that script fails. Email
+and other *agents* still need [Apprise](configuration.md) or a hook.
 
-The second is the user template directory, **read-only**, for `tetherd doctor`.
-Tetherd never rebuilds from those files.
+`/usr/local/emhttp` is the Unraid marker and is used by `tetherd doctor` for
+the template audit, not for notifications.
+
+The templates directory is **read-only**. Tetherd never rebuilds from those
+files.
 
 ## Labels
 

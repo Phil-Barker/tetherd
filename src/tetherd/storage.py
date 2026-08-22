@@ -1,4 +1,4 @@
-"""Durable JSON on disk, written so a power cut cannot leave a half-file.
+"""Durable files on disk, written so a power cut cannot leave a half-file.
 
 Tetherd's state is the only thing that makes a container recoverable after its
 provider has been replaced, so a truncated write is not a cosmetic problem. Every
@@ -19,15 +19,18 @@ class StorageError(RuntimeError):
     """State could not be written."""
 
 
-def write_json_atomically(path: Path, payload: Any) -> None:
-    """Serialise and replace ``path`` in one step, creating parents as needed."""
+def write_text_atomically(path: Path, text: str) -> None:
+    """Replace ``path`` in one step, creating parents as needed."""
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        _replace(path, json.dumps(payload, indent=2, sort_keys=True))
+        _replace(path, text)
     except OSError as exc:
-        raise StorageError(
-            f"cannot write {path}: {exc}. Tetherd needs a writable state directory."
-        ) from exc
+        raise StorageError(f"cannot write {path}: {exc}") from exc
+
+
+def write_json_atomically(path: Path, payload: Any) -> None:
+    """Serialise and replace ``path`` in one step, creating parents as needed."""
+    write_text_atomically(path, json.dumps(payload, indent=2, sort_keys=True))
 
 
 def read_json(path: Path) -> Any | None:

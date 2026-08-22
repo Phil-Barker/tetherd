@@ -184,7 +184,10 @@ element of a template belonging to a container that actually exists closes both
 halves of that.
 
 Also confirmed: `/usr/local/emhttp` and `/usr/local/emhttp/webGui/scripts/notify`
-both exist, and the update-status cache lives at
+both exist. The script is PHP (`#!/usr/bin/php -q`) and cannot run inside
+Tetherd's image; notifications are written as `.notify` files under
+`/tmp/notifications`, which Unraid 7's GraphQL API watches. The
+update-status cache lives at
 `/var/lib/docker/unraid-update-status.json` rather than the dynamix path some
 documentation cites.
 

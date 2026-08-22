@@ -49,7 +49,7 @@ docker run -d \
 
 Use `tetherd:local` if you built the image yourself.
 
-On Unraid, add the two extra mounts in [unraid.md](unraid.md) if you want the
+On Unraid, add the extra mounts in [unraid.md](unraid.md) if you want the
 notification bell and a template audit.
 
 `compose.yaml` in the repo is the same thing for a generic Docker host.

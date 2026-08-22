@@ -92,6 +92,22 @@ notifying on success would train you to ignore it. Set
 `TETHERD_NOTIFY__NOTIFY_ON_HEALTHY_RUNS=true` or `TETHERD_LOG_LEVEL=DEBUG`
 if you want the chatter.
 
+## Unraid's notification bell never rings
+
+The host `notify` script is PHP (`#!/usr/bin/php -q`). That interpreter is
+not in the Tetherd image, so calling the script fails with "No such file or
+directory" even though the script itself is visible.
+
+Mount the host directory Unraid actually watches:
+
+```
+-v /tmp/notifications:/tmp/notifications
+```
+
+Then `tetherd doctor` should list `unraid` as a notify channel. Email and
+other agents still go through Apprise or a hook; the `.notify` files only
+feed the UI bell.
+
 ## still stuck
 
 `tetherd status` prints a reason for every container it examined and set

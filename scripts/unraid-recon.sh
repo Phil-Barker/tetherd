@@ -41,6 +41,8 @@ section "Expected paths"
 for path in \
     /usr/local/emhttp \
     /usr/local/emhttp/webGui/scripts/notify \
+    /tmp/notifications \
+    /tmp/notifications/unread \
     "$TEMPLATE_DIR" \
     /var/lib/docker/unraid-update-status.json \
     /boot/config/plugins/dynamix.docker.manager/update-status.json

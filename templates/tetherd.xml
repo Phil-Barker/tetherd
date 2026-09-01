@@ -7,7 +7,7 @@
   <MyIP/>
   <Shell>bash</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/Phil-Barker/tetherd/issues</Support>
+  <Support>https://forums.unraid.net/topic/200447-support-tetherd/</Support>
   <Project>https://github.com/Phil-Barker/tetherd</Project>
   <Overview>Keeps containers attached to the network of the container they route through, such as apps using --network container:gluetun. When the VPN container restarts, those apps stay running but go offline; Tetherd repairs that with a restart where possible, and only rebuilds when the VPN container was recreated. Clean-room successor to Rebuild-DNDC: it reads live Docker config, not Unraid XML. Stop Rebuild-DNDC before installing. Needs the Docker socket, same trade-off as Watchtower. After install, docker exec tetherd tetherd doctor. Set restart policy to Unless Stopped.</Overview>
   <Category>Tools:Utilities</Category>

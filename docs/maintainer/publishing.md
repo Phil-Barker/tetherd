@@ -64,13 +64,10 @@ This repository is already laid out for that. Official notes:
 [Builder guide](https://ca.unraid.net/submit/help/builders),
 [XML field reference](https://ca.unraid.net/submit/help/xml-field-reference).
 
-1. **Forum thread (recommended before submit).** Create a topic under
-   [Docker Containers](https://forums.unraid.net/forum/47-docker-containers/)
-   titled something like `Tetherd - keep VPN-sidecar dependents online`.
-   Credit Rebuild-DNDC. Put the GitHub URL and `docker exec tetherd tetherd doctor`
-   in the first post. Then set `<Support>` in
-   [templates/tetherd.xml](../../templates/tetherd.xml) and `<Forum>` in
-   [ca_profile.xml](../../ca_profile.xml) to that thread URL and push.
+1. **Forum thread.** Support lives at
+   [forums.unraid.net/topic/200447-support-tetherd](https://forums.unraid.net/topic/200447-support-tetherd/).
+   That URL is already in `<Support>` and `<Forum>`. A move between forum
+   sections keeps the topic ID, so the link should not change.
 2. Open [ca.unraid.net/submit/new](https://ca.unraid.net/submit/new), point it
    at `https://github.com/Phil-Barker/tetherd`.
 3. Run **Validate**, then **Scan**. Fix whatever it flags (usually a Support

@@ -8,7 +8,8 @@ Docker Engine 29.5.3) with 82 user templates.
 
 Install from Community Applications once the template is listed (search
 **Tetherd**). Until then the XML is
-[templates/tetherd.xml](../templates/tetherd.xml).
+[tetherd.xml](https://raw.githubusercontent.com/Phil-Barker/unraid-templates/main/tetherd/tetherd.xml)
+in [Phil-Barker/unraid-templates](https://github.com/Phil-Barker/unraid-templates).
 
 ## Why this is still needed on Unraid 7.x
 

@@ -3,9 +3,9 @@
 Maintainer runbook for cutting a release and listing the app in Community
 Applications. Operator guides live under [docs/](../).
 
-The files are in the repo. The remaining steps are accounts, one git tag, and
-the Community Applications review form. Do them in this order: an image that
-does not exist yet will fail the CA scan.
+The image is already published. Community Applications listings go in
+[Phil-Barker/unraid-templates](https://github.com/Phil-Barker/unraid-templates),
+not this repository.
 
 ## 1. Docker Hub
 
@@ -58,23 +58,29 @@ On Unraid you can switch the test container from `tetherd:local` to
 
 ## 4. Community Applications
 
-Current Unraid process: a public GitHub repo with `ca_profile.xml` and
-`templates/*.xml`, then [ca.unraid.net/submit](https://ca.unraid.net/submit).
-This repository is already laid out for that. Official notes:
-[Builder guide](https://ca.unraid.net/submit/help/builders),
-[XML field reference](https://ca.unraid.net/submit/help/xml-field-reference).
+Do **not** submit [Phil-Barker/tetherd](https://github.com/Phil-Barker/tetherd)
+as a Community Applications repository. This account already has
+[Phil-Barker/unraid-templates](https://github.com/Phil-Barker/unraid-templates)
+in the feed; CA wants every template under that one repo.
+
+The canonical Unraid XML is
+[tetherd/tetherd.xml](https://github.com/Phil-Barker/unraid-templates/blob/main/tetherd/tetherd.xml).
+`templates/tetherd.xml` in this repo is a working copy: keep `<TemplateURL>`
+pointing at unraid-templates, then copy the file across when the template
+changes.
 
 1. **Forum thread.** Support lives at
    [forums.unraid.net/topic/200447-support-tetherd](https://forums.unraid.net/topic/200447-support-tetherd/).
-   That URL is already in `<Support>` and `<Forum>`. A move between forum
-   sections keeps the topic ID, so the link should not change.
-2. Open [ca.unraid.net/submit/new](https://ca.unraid.net/submit/new), point it
-   at `https://github.com/Phil-Barker/tetherd`.
-3. Run **Validate**, then **Scan**. Fix whatever it flags (usually a Support
-   URL, a missing icon, or the image not being pullable yet).
-4. Submit for review. Moderators look at the template, the Hub image, and
-   whether you look like you will support it.
+   That URL is already in `<Support>`. A move between forum sections keeps the
+   topic ID, so the link should not change.
+2. Push template changes to **unraid-templates** `main`.
+3. On [ca.unraid.net/submit](https://ca.unraid.net/submit), open the existing
+   PhilBarker's Repository and run **Validate** then **Scan** on
+   `https://github.com/Phil-Barker/unraid-templates`.
+4. Submit that scan for review if the flow asks for it. Do not start a second
+   repository submission.
 
-Until it is in the feed, anyone can still add the template URL by hand:
+Until Tetherd is in the feed, anyone can still add the template URL by hand:
 
-`https://raw.githubusercontent.com/Phil-Barker/tetherd/main/templates/tetherd.xml`
+`https://raw.githubusercontent.com/Phil-Barker/unraid-templates/main/tetherd/tetherd.xml`
+

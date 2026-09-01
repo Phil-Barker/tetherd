@@ -14,7 +14,7 @@
   <ExtraSearchTerms>vpn gluetun wireguard rebuild-dndc docker network sidecar</ExtraSearchTerms>
   <Requires>A container whose network others borrow (typically a VPN sidecar such as gluetun). Host access to the Docker socket. Stop Rebuild-DNDC first if it is still running.</Requires>
   <Icon>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/img/tetherd-logo-500px.png</Icon>
-  <TemplateURL>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/templates/tetherd.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/Phil-Barker/unraid-templates/main/tetherd/tetherd.xml</TemplateURL>
   <ReadMe>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/README.md</ReadMe>
   <Changes>Initial public release.</Changes>
   <Date>2026-08-21</Date>

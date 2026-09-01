@@ -12,7 +12,8 @@ It is not a fork. It reads configuration from the live Docker API, not from Unra
 XML templates.
 
 **Unraid:** install from Community Applications (search **Tetherd**) once the
-template is listed. Until then, use the XML in the GitHub repo.
+template is listed. Until then, add the XML from
+[Phil-Barker/unraid-templates](https://github.com/Phil-Barker/unraid-templates).
 
 **Source and docs:** [github.com/Phil-Barker/tetherd](https://github.com/Phil-Barker/tetherd)
 

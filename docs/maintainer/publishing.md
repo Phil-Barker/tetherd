@@ -30,8 +30,8 @@ GHCR uses `GITHUB_TOKEN`, which GitHub already provides. No extra secret.
 
 ## 3. Cut a tag
 
-`0.1.0` is honest while the README still says early development. `v1.0.0`
-can wait until this has lived on a few Unraid boxes.
+`v0.1.1` is the current public tag. `v1.0.0` can wait until this has lived
+on a few Unraid boxes.
 
 ```bash
 git tag -a v0.1.0 -m "Initial public release."

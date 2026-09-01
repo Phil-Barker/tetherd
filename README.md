@@ -10,7 +10,8 @@ apps lose their networking whenever the VPN container restarts or is recreated.
 Tetherd watches for that and repairs it — preferring a plain restart, and only
 rebuilding a container when it genuinely has to.
 
-> Status: early development. Not yet released.
+> Status: v0.1.1. Public, still early. The image is on Docker Hub;
+> Community Applications listing is next.
 
 ## Why another one of these
 

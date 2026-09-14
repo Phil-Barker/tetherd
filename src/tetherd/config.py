@@ -159,6 +159,14 @@ class Settings(BaseSettings):
         ge=0,
         description="Quiet period after a provider event before acting, to coalesce bursts.",
     )
+    provider_recreate_settle_seconds: float = Field(
+        default=15.0,
+        ge=0,
+        description=(
+            "After the provider is replaced (new container ID), wait before repairing "
+            "dependents so an orchestrator such as Unraid can finish its own rebuilds."
+        ),
+    )
 
     state_dir: Path = Field(
         default=Path("/config"),

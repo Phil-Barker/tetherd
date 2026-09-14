@@ -43,7 +43,7 @@ from typing import Any, Final
 
 from .assess import assess
 from .docker_api import ContainerOperationError, DockerApi
-from .models import Assessment, ContainerInfo, Verdict
+from .models import Assessment, ContainerInfo, Verdict, reference_matches
 from .payload import CreateRequest, PayloadError, StrippedField, build_create_request
 from .snapshots import SnapshotStore
 
@@ -187,6 +187,14 @@ class Remediator:
     def _recreate(
         self, container: ContainerInfo, provider: ContainerInfo, verdict: Verdict
     ) -> RemediationResult:
+        # Unraid rebuilds dependents when the provider is updated from the Docker
+        # tab. If that already produced a correctly attached replacement, the
+        # original ID is gone and fighting for the name is the bug.
+        if not self._docker.exists(container.id) and self._replacement_already_in_place(
+            container.name, provider
+        ):
+            return self._left_in_place(container.name, provider)
+
         source, origin = self._configuration_for(container)
         if source is None:
             return RemediationResult(
@@ -248,6 +256,12 @@ class Remediator:
             if was_running or not existed:
                 self._docker.start(created_id)
         except ContainerOperationError as exc:
+            if _is_name_conflict(exc.detail) and self._replacement_already_in_place(
+                container.name, provider
+            ):
+                if aside is not None:
+                    self._discard(aside)
+                return self._left_in_place(container.name, provider)
             return self._roll_back(container, verdict, aside, was_running, exc.detail)
 
         if was_running or not existed:
@@ -318,6 +332,28 @@ class Remediator:
         )
 
     # -- helpers -----------------------------------------------------------
+
+    def _replacement_already_in_place(self, name: str, provider: ContainerInfo) -> bool:
+        """Whether ``name`` is already held by a container attached to this provider.
+
+        Network mode is the signal that matters: Unraid may have created the
+        replacement but not started it yet, so timestamps and running state
+        are not required.
+        """
+        occupant = self._inspect_info(name)
+        if occupant is None:
+            return False
+        ref = occupant.provider_ref
+        return ref is not None and reference_matches(ref, provider)
+
+    def _left_in_place(self, name: str, provider: ContainerInfo) -> RemediationResult:
+        return RemediationResult(
+            container=name,
+            verdict=Verdict.HEALTHY,
+            action=Action.NONE,
+            succeeded=True,
+            detail=f"already attached to {provider.name}; another process rebuilt it first",
+        )
 
     def _configuration_for(self, container: ContainerInfo) -> tuple[Mapping[str, Any] | None, str]:
         """The freshest usable configuration, and where it came from.
@@ -449,6 +485,11 @@ class Remediator:
     def _inspect_info(self, ref: str) -> ContainerInfo | None:
         payload = self._docker.inspect(ref)
         return ContainerInfo.from_inspect(payload) if payload is not None else None
+
+
+def _is_name_conflict(detail: str) -> bool:
+    """Docker refuses a create when the requested name is already taken."""
+    return "already in use" in detail.lower()
 
 
 def _original_name(aside_name: str) -> str:

@@ -17,6 +17,7 @@ JSON into a web form.
 | adopt_orphans | `TETHERD_ADOPT_ORPHANS` | true | Claim dependents whose provider ID no longer exists. Turn off if you run more than one provider. |
 | reconcile_interval_seconds | `TETHERD_RECONCILE_INTERVAL_SECONDS` | 300 | Full pass cadence, behind the event stream. |
 | event_debounce_seconds | `TETHERD_EVENT_DEBOUNCE_SECONDS` | 5 | Quiet period after a provider event so a recreate is one pass, not five. |
+| provider_recreate_settle_seconds | `TETHERD_PROVIDER_RECREATE_SETTLE_SECONDS` | 15 | After the provider is replaced (new container ID), wait before repairing dependents so Unraid can finish its own rebuilds. A provider *restart* (same ID) does not wait. |
 | state_dir | `TETHERD_STATE_DIR` | `/config` | Snapshots and provider ID history. |
 | snapshot_retention | `TETHERD_SNAPSHOT_RETENTION` | 5 | Known-good configs kept per container. |
 | dry_run | `TETHERD_DRY_RUN` | false | Report without changing anything. Also `tetherd run --dry-run`. |

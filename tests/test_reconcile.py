@@ -42,11 +42,17 @@ def settings_for(tmp_path: Path, **overrides: Any) -> Settings:
         "provider": "gluetun",
         "state_dir": tmp_path,
         "probe": ProbeSettings(enabled=False, settle_seconds=0.0),
+        "provider_recreate_settle_seconds": 0.0,
     }
     return Settings(**{**defaults, **overrides})
 
 
-def reconciler(docker: FakeDocker, settings: Settings) -> Reconciler:
+def reconciler(
+    docker: FakeDocker,
+    settings: Settings,
+    *,
+    sleep: Any = None,
+) -> Reconciler:
     api = cast(DockerApi, docker)
     return Reconciler(
         api,
@@ -61,6 +67,7 @@ def reconciler(docker: FakeDocker, settings: Settings) -> Reconciler:
         ),
         monitor=ProviderMonitor(api, settings.probe, sleep=lambda _: None),
         state=ProviderStateStore(settings.provider_state_file),
+        sleep=sleep or (lambda _: None),
     )
 
 
@@ -391,3 +398,126 @@ class TestNotifications:
 
         assert any("adopting qbittorrent" in note for note in report.notes)
         assert [c.name for c in report.discovery.adopted] == ["qbittorrent"]
+
+
+class TestProviderRecreateRace:
+    """Unraid rebuilds dependents when the VPN container is updated from the Docker tab.
+
+    Tetherd watching the same events used to race that cascade: it would recreate
+    two children, then fail on the third with 'name already in use', then report
+    an error for a host that was already fine.
+    """
+
+    def test_a_recreated_provider_waits_before_repairing_dependents(
+        self, docker: FakeDocker, tmp_path: Path
+    ) -> None:
+        wire(docker)
+        settings = settings_for(tmp_path, provider_recreate_settle_seconds=15.0)
+        reconciler(docker, settings).run_once()
+
+        _replace_provider(docker)
+        slept: list[float] = []
+        report = reconciler(docker, settings, sleep=slept.append).run_once()
+
+        assert slept == [15.0]
+        assert any("waiting 15s" in note for note in report.notes)
+
+    def test_a_provider_restart_does_not_wait(self, docker: FakeDocker, tmp_path: Path) -> None:
+        """The common case: Appdata Backup, or docker restart. Same ID, stale namespace."""
+        wire(docker)
+        settings = settings_for(tmp_path, provider_recreate_settle_seconds=15.0)
+        reconciler(docker, settings).run_once()
+        docker.restart("gluetun")
+
+        slept: list[float] = []
+        report = reconciler(docker, settings, sleep=slept.append).run_once()
+
+        assert slept == []
+        assert [result.action for result in report.repairs] == [Action.RESTART]
+
+    def test_the_first_pass_does_not_wait(self, docker: FakeDocker, tmp_path: Path) -> None:
+        """No previous provider ID means this is not a recreate we observed."""
+        wire(docker, provider_id=NEW_PROVIDER_ID)
+        settings = settings_for(tmp_path, provider_recreate_settle_seconds=15.0)
+
+        slept: list[float] = []
+        reconciler(docker, settings, sleep=slept.append).run_once()
+
+        assert slept == []
+
+    def test_unraid_finishing_during_the_wait_means_nothing_to_repair(
+        self, docker: FakeDocker, tmp_path: Path
+    ) -> None:
+        wire(docker, dependents=("qbittorrent", "prowlarr"))
+        settings = settings_for(tmp_path, provider_recreate_settle_seconds=15.0)
+        reconciler(docker, settings).run_once()
+        _replace_provider(docker)
+
+        def unraid_rebuilds(_seconds: float) -> None:
+            for name in ("qbittorrent", "prowlarr"):
+                docker.remove(name)
+                docker.add(
+                    make_inspect(
+                        container_id=f"{name}-new".ljust(64, "0"),
+                        name=name,
+                        started_at=docker.clock.tick(),
+                        network_mode=f"container:{NEW_PROVIDER_ID}",
+                    )
+                )
+
+        report = reconciler(docker, settings, sleep=unraid_rebuilds).run_once()
+
+        assert report.repairs == []
+        assert all(a.verdict is Verdict.HEALTHY for a in report.assessments)
+
+    def test_a_dependent_replaced_during_an_earlier_repair_is_left_alone(
+        self, tmp_path: Path
+    ) -> None:
+        """Discovery still saw the old qbittorrent; Unraid replaced it mid-pass."""
+        docker_racing = _UnraidRebuildsNext()
+        wire(
+            docker_racing,
+            provider_id=NEW_PROVIDER_ID,
+            dependent_ref=PROVIDER_ID,
+            dependents=("flaresolverr", "qbittorrent"),
+        )
+
+        report = reconciler(docker_racing, settings_for(tmp_path)).run_once()
+
+        assert [result.container for result in report.repairs] == ["flaresolverr"]
+        qbittorrent = next(a for a in report.assessments if a.container.name == "qbittorrent")
+        assert qbittorrent.verdict is Verdict.HEALTHY
+        assert "create:qbittorrent" not in docker_racing.operations
+        assert docker_racing.by_name("qbittorrent")["Id"] == "e" * 64  # type: ignore[index]
+
+
+def _replace_provider(docker: FakeDocker) -> None:
+    """Recreate the provider the way Unraid does on Apply / image update."""
+    started = docker.clock.tick()
+    docker.remove("gluetun")
+    docker.add(
+        make_inspect(
+            container_id=NEW_PROVIDER_ID,
+            name="gluetun",
+            started_at=started,
+            sandbox_key="/run/docker/netns/new",
+        )
+    )
+
+
+class _UnraidRebuildsNext(FakeDocker):
+    """While Tetherd recreates one dependent, Unraid finishes the next one."""
+
+    def create(self, name: str, body: Any) -> str:
+        created = super().create(name, body)
+        if name == "flaresolverr" and self.by_name("qbittorrent") is not None:
+            self.remove("qbittorrent")
+            self.add(
+                make_inspect(
+                    container_id="e" * 64,
+                    name="qbittorrent",
+                    started_at=self.clock.tick(),
+                    network_mode=f"container:{NEW_PROVIDER_ID}",
+                )
+            )
+        return created

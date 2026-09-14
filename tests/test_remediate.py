@@ -476,3 +476,83 @@ class TestForcedRebuild:
         assert result.succeeded, result.detail
         assert result.verdict is Verdict.FORCED
         assert docker.by_name("qbittorrent")["Id"] != DEPENDENT  # type: ignore[index]
+
+
+class TestConcurrentRebuild:
+    """Unraid and Tetherd can both try to rebuild a dependent after a provider update."""
+
+    def test_a_healthy_replacement_already_holding_the_name_is_left_alone(
+        self, docker: FakeDocker, store: SnapshotStore
+    ) -> None:
+        dependent, provider = scenario(docker, provider_id=PROVIDER_NEW)
+        store.capture(dict(docker.by_name("qbittorrent") or {}))
+        docker.remove("qbittorrent")
+        docker.add(
+            make_inspect(
+                container_id="f" * 64,
+                name="qbittorrent",
+                started_at=docker.clock.tick(),
+                network_mode=f"container:{PROVIDER_NEW}",
+                labels=dict(UNRAID_LABELS),
+            )
+        )
+
+        result = build(docker, store).remediate(assess(dependent, provider), provider)
+
+        assert result.succeeded
+        assert result.action is Action.NONE
+        assert "another process rebuilt it first" in result.detail
+        assert not any(op.startswith("create") for op in docker.operations)
+        assert docker.by_name("qbittorrent")["Id"] == "f" * 64  # type: ignore[index]
+
+    def test_a_name_conflict_with_a_healthy_replacement_is_not_a_failure(
+        self, docker: FakeDocker, store: SnapshotStore
+    ) -> None:
+        """The original was renamed aside, then Unraid created the name Tetherd wanted."""
+        racing = _UnraidCreatesAfterRename()
+        dependent, provider = scenario(racing, provider_id=PROVIDER_NEW)
+
+        result = build(racing, store).remediate(assess(dependent, provider), provider)
+
+        assert result.succeeded, result.detail
+        assert result.action is Action.NONE
+        assert racing.by_name("qbittorrent")["Id"] == "f" * 64  # type: ignore[index]
+        assert racing.by_name(f"qbittorrent{ASIDE_SUFFIX}") is None
+
+    def test_a_name_conflict_with_an_unrelated_container_still_fails(
+        self, docker: FakeDocker, store: SnapshotStore
+    ) -> None:
+        dependent, provider = scenario(docker, provider_id=PROVIDER_NEW)
+        store.capture(dict(docker.by_name("qbittorrent") or {}))
+        docker.remove("qbittorrent")
+        docker.add(
+            make_inspect(
+                container_id="f" * 64,
+                name="qbittorrent",
+                network_mode="bridge",
+            )
+        )
+
+        result = build(docker, store).remediate(assess(dependent, provider), provider)
+
+        assert not result.succeeded
+        assert "already in use" in result.detail
+        assert "Nothing was changed" in result.detail
+
+
+class _UnraidCreatesAfterRename(FakeDocker):
+    """Models Unraid creating the original name after Tetherd parked the old container."""
+
+    def rename(self, ref: str, new_name: str) -> None:
+        super().rename(ref, new_name)
+        original = new_name[: -len(ASIDE_SUFFIX)] if new_name.endswith(ASIDE_SUFFIX) else ""
+        if original and not self.exists(original):
+            self.add(
+                make_inspect(
+                    container_id="f" * 64,
+                    name=original,
+                    started_at=self.clock.tick(),
+                    network_mode=f"container:{PROVIDER_NEW}",
+                    labels=dict(UNRAID_LABELS),
+                )
+            )

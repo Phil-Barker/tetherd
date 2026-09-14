@@ -103,3 +103,10 @@ Tetherd is not trying to be the Unraid UI. Tetherd's job is the cases Unraid
 does not see: a provider restart that does not change the ID, a dead tunnel
 behind a running process, and a host whose VPN was already replaced before
 you installed the helper.
+
+Updating the VPN container from the Docker tab is the overlap. Unraid then
+rebuilds every child that used `container:` networking, and Tetherd sees the
+same events. Tetherd waits `provider_recreate_settle_seconds` (default 15)
+after a provider ID change, re-checks each dependent immediately before
+touching it, and treats "name already in use" by a correctly attached
+replacement as Unraid having won — not as a failed repair.

@@ -17,7 +17,8 @@ reporting failure rather than a logic one.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from .assess import assess
@@ -76,6 +77,7 @@ class Reconciler:
         remediator: Remediator,
         monitor: ProviderMonitor,
         state: ProviderStateStore,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         self._api = api
         self._settings = settings
@@ -83,6 +85,7 @@ class Reconciler:
         self._remediator = remediator
         self._monitor = monitor
         self._state = state
+        self._sleep = sleep
 
     def run_once(self) -> ReconcileReport:
         notes: list[str] = []
@@ -110,7 +113,6 @@ class Reconciler:
             # Losing the provider's ID history costs orphan recognition on a later
             # pass. It must not cost this pass entirely.
             notes.append(str(exc))
-        notes.extend(self._scoping_notes(discovery))
 
         status = self._monitor.check(provider)
         restarted = False
@@ -123,6 +125,7 @@ class Reconciler:
                 provider = self._refreshed(provider) or provider
 
         if not status.can_repair_dependents:
+            notes.extend(self._scoping_notes(discovery))
             notes.append(
                 f"leaving {len(discovery.managed)} dependent(s) alone until "
                 f"{provider.name} is back: {status.detail}"
@@ -135,11 +138,62 @@ class Reconciler:
                 notes=notes,
             )
 
+        # A new provider ID means Unraid (or Compose, or an operator) already
+        # replaced the VPN container and may now be rebuilding every dependent
+        # itself. Acting in the middle of that cascade is how a name conflict
+        # is reported as a failed repair of a container that is already fine.
+        settle = self._settings.provider_recreate_settle_seconds
+        if known and provider.id not in known and settle > 0:
+            notes.append(
+                f"provider {provider.name} was recreated; waiting {settle:g}s "
+                "in case another process is already rebuilding its dependents"
+            )
+            self._sleep(settle)
+            discovery = discover(
+                self._api, self._settings, known_provider_ids=self._state.load().ids
+            )
+            if discovery.provider is None:
+                notes.append(
+                    f"the provider {self._settings.provider!r} disappeared while "
+                    "waiting for dependents to settle"
+                )
+                return ReconcileReport(
+                    discovery=discovery,
+                    provider_status=status,
+                    provider_restarted=restarted,
+                    recovered=recovered,
+                    notes=notes,
+                )
+            provider = discovery.provider
+            status = self._monitor.check(provider)
+            if not status.can_repair_dependents:
+                notes.extend(self._scoping_notes(discovery))
+                notes.append(
+                    f"leaving {len(discovery.managed)} dependent(s) alone until "
+                    f"{provider.name} is back: {status.detail}"
+                )
+                return ReconcileReport(
+                    discovery=discovery,
+                    provider_status=status,
+                    provider_restarted=restarted,
+                    recovered=recovered,
+                    notes=notes,
+                )
+
+        notes.extend(self._scoping_notes(discovery))
+
         assessments: list[Assessment] = []
         results: list[RemediationResult] = []
         snapshotted: list[str] = []
 
         for dependent in discovery.managed:
+            # Re-inspect by name: discovery ran before this loop, and Unraid (or
+            # an earlier repair in this pass) may already have replaced this
+            # container. Acting on the ID we first saw is how a name conflict
+            # is reported as a failed repair of something that is already fine.
+            live = self._refreshed(dependent, by_name=True)
+            if live is not None:
+                dependent = live
             assessment = assess(dependent, provider)
             assessments.append(assessment)
 
@@ -153,7 +207,9 @@ class Reconciler:
             result = self._remediator.remediate(assessment, provider)
             results.append(result)
 
-            if result.succeeded and result.action is not Action.NONE:
+            if result.succeeded and (
+                result.action is not Action.NONE or result.verdict is Verdict.HEALTHY
+            ):
                 repaired = self._refreshed(dependent, by_name=True)
                 if repaired is not None and self._record(repaired, notes):
                     snapshotted.append(repaired.name)

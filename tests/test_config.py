@@ -33,6 +33,7 @@ def test_minimal_configuration_has_workable_defaults() -> None:
     assert settings.dry_run is False
     assert settings.probe.enabled is False
     assert settings.adopt_orphans is True
+    assert settings.provider_recreate_settle_seconds == 15.0
     assert settings.snapshot_dir == Path("/config/snapshots")
 
 
@@ -103,6 +104,7 @@ class TestContradictoryScoping:
         ("TETHERD_RECONCILE_INTERVAL_SECONDS", "0"),
         ("TETHERD_SNAPSHOT_RETENTION", "0"),
         ("TETHERD_RESTART_GRACE_SECONDS", "-1"),
+        ("TETHERD_PROVIDER_RECREATE_SETTLE_SECONDS", "-1"),
         ("TETHERD_PROBE__TIMEOUT_SECONDS", "0"),
         ("TETHERD_PROBE__FAILURES_BEFORE_RESTART", "0"),
         ("TETHERD_LOG_LEVEL", "CHATTY"),

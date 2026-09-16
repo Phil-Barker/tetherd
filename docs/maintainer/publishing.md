@@ -45,7 +45,9 @@ That runs `.github/workflows/release.yml`: tests, then a multi-arch
 - `ghcr.io/phil-barker/tetherd` with the same tags
 
 It also writes [dockerhub.md](../../dockerhub.md) onto the Hub page and opens a
-GitHub release with generated notes.
+GitHub release. Release notes are generated with an explicit previous tag so the
+**Full Changelog** link is a compare URL (`v0.1.1...v0.1.2`), not the tag's
+full commit history. See [AGENTS.md](../../AGENTS.md).
 
 Confirm:
 

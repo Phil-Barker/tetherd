@@ -39,6 +39,25 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CURRENT="${GITHUB_REF_NAME}"
+          PREV=$(git tag --sort=-version:refname | grep -E '^v[0-9]' | grep -Fxv "$CURRENT" | head -1 || true)
+          if [ -n "$PREV" ]; then
+            gh api "repos/${GITHUB_REPOSITORY}/releases/generate-notes" \
+              -f "tag_name=${CURRENT}" \
+              -f "target_commitish=${GITHUB_SHA}" \
+              -f "previous_tag_name=${PREV}" \
+              --jq .body > release-notes.md
+          else
+            printf '%s\n' "Initial public release." > release-notes.md
+          fi
 
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
@@ -84,4 +103,4 @@ jobs:
 
       - uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
+          body_path: release-notes.md

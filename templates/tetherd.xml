@@ -16,8 +16,8 @@
   <Icon>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/img/tetherd-logo-500px.png</Icon>
   <TemplateURL>https://raw.githubusercontent.com/Phil-Barker/unraid-templates/main/tetherd/tetherd.xml</TemplateURL>
   <ReadMe>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/README.md</ReadMe>
-  <Changes>Initial public release.</Changes>
-  <Date>2026-08-21</Date>
+  <Changes>v0.1.2: Stop racing Unraid when the VPN container is updated from the Docker tab. Waits for Unraid to finish rebuilding dependents, re-checks each container before repair, and no longer reports a false error when Unraid already rebuilt one.</Changes>
+  <Date>2026-09-16</Date>
   <MinVer>7.0</MinVer>
   <License>MIT</License>
 

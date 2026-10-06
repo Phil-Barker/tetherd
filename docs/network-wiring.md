@@ -64,6 +64,11 @@ again. Tetherd strips these fields on its own rebuilds and will not remove the
 original until a replacement is running. `tetherd doctor` still warns, because
 pressing Apply in the Docker tab uses the template, not Tetherd.
 
+With Network Type set to `container:gluetun`, dockerMan leaves the template's
+ports out of the command it builds: it publishes them only when the network it
+names is a bridge, and `container:gluetun` is not a network. Apply succeeds, so
+`doctor` flags ports only in the Extra Parameters form.
+
 ## Do not `docker network create container:gluetun`
 
 Rebuild-DNDC's README suggested that. It creates a user-defined bridge named

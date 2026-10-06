@@ -260,6 +260,26 @@ class TestTemplateAudit:
         assert "conflicting options" in audit.problems[0]
         assert "8080" in audit.problems[0]
 
+    def test_published_ports_with_the_network_element_form_are_not_flagged(
+        self, tmp_path: Path
+    ) -> None:
+        """dockerMan drops them, so Apply in the Docker tab still succeeds.
+
+        On 7.3.2 ``xmlToCommand`` emits ``-p`` only when the driver looked up
+        by the ``<Network>`` value is ``bridge``. ``container:gluetun`` is not
+        a network name, so no driver is found and the ports are skipped.
+        """
+        write_template(
+            tmp_path,
+            "my-app.xml",
+            container_template("app", network="container:gluetun", ports=("8080",)),
+        )
+
+        audit = audit_templates(["app"], tmp_path, provider="gluetun")["app"]
+
+        assert audit.declared_provider == "gluetun"
+        assert audit.is_healthy
+
     def test_a_network_type_that_contradicts_extra_params_is_flagged(self, tmp_path: Path) -> None:
         """The misconfiguration behind issue #57, open upstream for five years."""
         write_template(

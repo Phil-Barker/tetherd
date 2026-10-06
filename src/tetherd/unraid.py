@@ -229,8 +229,9 @@ def _inspect_template(path: Path, provider: str | None) -> tuple[str | None, lis
     # A borrowed network appears either in the Network element, which is what
     # current Unraid writes, or as a flag in Extra Parameters, the older style
     # the upstream README still documents as its "alternate steps".
+    from_network = _provider_from_network_element(network)
     from_extra_params = _provider_from_extra_params(extra_params)
-    declared = _provider_from_network_element(network) or from_extra_params
+    declared = from_network or from_extra_params
     if declared is None:
         return None, []
 
@@ -241,7 +242,7 @@ def _inspect_template(path: Path, provider: str | None) -> tuple[str | None, lis
         for config in root.findall("Config")
         if (config.get("Type") or "").strip().lower() == "port" and (config.text or "").strip()
     )
-    if published:
+    if published and from_network is None:
         problems.append(
             f"template {path.name} publishes ports ({', '.join(published)}) while "
             "routing through another container's network. Unraid will fail to "

@@ -122,6 +122,19 @@ class TestNothingToDo:
         assert result.action is Action.NONE
         assert docker.operations == []
 
+    def test_a_stopped_container_is_not_started_after_a_provider_restart(
+        self, docker: FakeDocker, store: SnapshotStore
+    ) -> None:
+        """Issue #1: ``docker restart`` on a stopped container starts it."""
+        dependent, provider = scenario(docker, provider_started_after=True, dependent_running=False)
+
+        result = build(docker, store).remediate(assess(dependent, provider), provider)
+
+        assert result.verdict is Verdict.STOPPED
+        assert result.action is Action.NONE
+        assert docker.operations == []
+        assert docker.by_name("qbittorrent")["State"]["Running"] is False  # type: ignore[index]
+
 
 class TestRestartTier:
     """A stale namespace needs a restart, not a rebuild.

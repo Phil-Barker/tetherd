@@ -55,6 +55,13 @@ def assess(dependent: ContainerInfo, provider: ContainerInfo) -> Assessment:
             reason="has never been started, so there is no namespace to have lost",
         )
 
+    if not dependent.running:
+        return Assessment(
+            container=dependent,
+            verdict=Verdict.STOPPED,
+            reason="is stopped, so it holds no namespace; it joins the current one when started",
+        )
+
     if provider.started_at is not None and provider.started_at > dependent.started_at:
         return Assessment(
             container=dependent,

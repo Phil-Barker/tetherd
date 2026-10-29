@@ -137,6 +137,9 @@ class Verdict(StrEnum):
     NEVER_STARTED = "never_started"
     """Created but never started; nothing to infer from timestamps yet."""
 
+    STOPPED = "stopped"
+    """Not running, so it holds no namespace; it joins the current one when next started."""
+
     FORCED = "forced"
     """An explicit rebuild requested by the operator, not by assessment."""
 

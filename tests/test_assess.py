@@ -80,6 +80,18 @@ def test_never_started_dependent_is_not_actioned(
     assert not result.needs_action
 
 
+def test_stopped_dependent_is_left_alone(
+    provider_payload: dict[str, Any], dependent_payload: dict[str, Any]
+) -> None:
+    """Issue #1: a restart would start a container the user keeps stopped."""
+    dependent_payload["State"]["Running"] = False
+
+    result = assess(info(dependent_payload), info(provider_payload))
+
+    assert result.verdict is Verdict.STOPPED
+    assert not result.needs_action
+
+
 def test_container_not_borrowing_a_network_is_ignored(
     provider_payload: dict[str, Any],
 ) -> None:

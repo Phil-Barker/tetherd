@@ -188,4 +188,4 @@ class TestHelp:
         result = runner.invoke(app, ["--version"])
 
         assert result.exit_code == 0, result.output
-        assert "0.1.3" in result.stdout
+        assert "0.1.4" in result.stdout

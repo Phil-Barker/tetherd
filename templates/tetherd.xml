@@ -16,7 +16,7 @@
   <Icon>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/img/tetherd-logo-500px.png</Icon>
   <TemplateURL>https://raw.githubusercontent.com/Phil-Barker/unraid-templates/main/tetherd/tetherd.xml</TemplateURL>
   <ReadMe>https://raw.githubusercontent.com/Phil-Barker/tetherd/main/README.md</ReadMe>
-  <Changes>v0.1.3: Leave deliberately stopped dependents stopped after a VPN restart. A stopped container was judged stale from timestamps, and docker restart started it.</Changes>
+  <Changes>v0.1.4: Doctor no longer false-flags published ports when Network Type is container:provider. dockerMan drops those ports, so Apply still succeeds. Extra Parameters form is still warned.</Changes>
   <Date>2026-10-29</Date>
   <MinVer>7.0</MinVer>
   <License>MIT</License>

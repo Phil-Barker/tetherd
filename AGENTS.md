@@ -24,6 +24,14 @@ Operator docs: `docs/`. Maintainer runbook: `docs/maintainer/publishing.md`.
 - Conventional Commits for messages when committing
 - Never update git config
 
+## Pull requests
+
+Review **all** open issues and PRs before merging or tagging. Thank the author
+on an accepted PR. Merge when happy.
+
+Release as many changes as you can within one release, not one release per
+bugfix/feature. Full workflow: `.cursor/skills/review-prs/SKILL.md`.
+
 ## Releases and tags
 
 Tags use semver with a `v` prefix: `v0.1.2`.
